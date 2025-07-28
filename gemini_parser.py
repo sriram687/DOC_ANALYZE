@@ -47,17 +47,44 @@ class GeminiParser:
                     max_output_tokens=500
                 )
             )
-            return json.loads(response.text.strip())
+
+            # Clean and parse the response
+            response_text = response.text.strip()
+            logger.debug(f"Raw Gemini response: {response_text}")
+
+            # Try to extract JSON from the response
+            if response_text.startswith('```json'):
+                # Remove markdown code blocks
+                response_text = response_text.replace('```json', '').replace('```', '').strip()
+            elif response_text.startswith('```'):
+                # Remove any code blocks
+                response_text = response_text.replace('```', '').strip()
+
+            # Try to find JSON object in the response
+            start_idx = response_text.find('{')
+            end_idx = response_text.rfind('}') + 1
+            if start_idx != -1 and end_idx > start_idx:
+                json_text = response_text[start_idx:end_idx]
+                return json.loads(json_text)
+            else:
+                # If no JSON found, try parsing the whole response
+                return json.loads(response_text)
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing error: {str(e)}")
+            logger.error(f"Response text: {response.text if 'response' in locals() else 'No response'}")
         except Exception as e:
             logger.error(f"Error parsing query intent: {str(e)}")
-            # Fallback basic parsing
-            return {
-                "intent": "general_inquiry",
-                "target": query[:50],
-                "focus": ["coverage", "conditions"],
-                "question_type": "explanation",
-                "entities": []
-            }
+
+        # Fallback basic parsing
+        logger.info("Using fallback query intent parsing")
+        return {
+            "intent": "general_inquiry",
+            "target": query[:50],
+            "focus": ["coverage", "conditions"],
+            "question_type": "explanation",
+            "entities": []
+        }
     
     async def evaluate_clause_relevance(self, query: str, chunks: List[str]) -> List[Dict[str, Any]]:
         """Use Gemini to assess and rank chunk relevance"""

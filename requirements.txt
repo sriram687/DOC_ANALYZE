@@ -1,0 +1,107 @@
+# Enhanced Document Query API Requirements
+# Core dependencies for the FastAPI-based document analysis system with Pinecone + PostgreSQL
+
+# ============================================================================
+# CORE WEB FRAMEWORK
+# ============================================================================
+fastapi>=0.116.0
+uvicorn>=0.35.0
+python-multipart>=0.0.20
+
+# ============================================================================
+# GOOGLE AI & GENERATIVE AI
+# ============================================================================
+google-generativeai>=0.8.0
+
+# ============================================================================
+# DOCUMENT PROCESSING
+# ============================================================================
+PyMuPDF>=1.26.0
+python-docx>=1.2.0
+
+# ============================================================================
+# MACHINE LEARNING & EMBEDDINGS
+# ============================================================================
+numpy>=2.2.0
+sentence-transformers>=2.2.0
+
+# ============================================================================
+# VECTOR DATABASE (PINECONE)
+# ============================================================================
+pinecone>=7.0.0
+
+# ============================================================================
+# RELATIONAL DATABASE (POSTGRESQL)
+# ============================================================================
+sqlalchemy>=2.0.0
+asyncpg>=0.29.0
+psycopg[binary]>=3.2.0
+psycopg2-binary>=2.9.0
+
+# ============================================================================
+# DATA VALIDATION & CONFIGURATION
+# ============================================================================
+pydantic>=2.11.0
+python-dotenv>=1.1.0
+
+# ============================================================================
+# HTTP & NETWORKING
+# ============================================================================
+requests>=2.32.0
+
+# ============================================================================
+# OPTIONAL DEPENDENCIES
+# ============================================================================
+# Caching Support
+redis>=4.0.0
+
+# OCR Support (for image processing)
+# pytesseract>=0.3.10
+# Pillow>=9.0.0
+
+# Advanced Text Processing
+# nltk>=3.8
+# tiktoken>=0.5.0
+
+# System Monitoring
+# psutil>=5.9.0
+
+# ============================================================================
+# DEVELOPMENT DEPENDENCIES (uncomment for development)
+# ============================================================================
+# Testing
+# pytest>=7.0.0
+# pytest-asyncio>=0.21.0
+
+# Code Quality
+# black>=22.0.0
+# flake8>=5.0.0
+# mypy>=1.0.0
+
+# ============================================================================
+# INSTALLATION & VERIFICATION
+# ============================================================================
+# 1. Install dependencies:
+#    pip install -r requirements.txt
+#
+# 2. Verify installation:
+#    python verify_requirements.py
+#
+# 3. Set environment variables in .env file:
+#    - GEMINI_API_KEY (Google AI API key)
+#    - PINECONE_API_KEY (Pinecone vector database)
+#    - DATABASE_URL (PostgreSQL/Neon database)
+#
+# 4. Run the application:
+#    python main.py
+#
+# 5. Access the API:
+#    - Server: http://localhost:3000
+#    - Docs: http://localhost:3000/docs
+#
+# ============================================================================
+# OPTIONAL SETUP
+# ============================================================================
+# For OCR support: Install Tesseract OCR binary separately
+# For Redis caching: Install and run Redis server
+# For development: Uncomment development dependencies above

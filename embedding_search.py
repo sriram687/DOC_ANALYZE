@@ -24,14 +24,14 @@ except ImportError:
         def encode(self, *args, **kwargs):
             return []
 
+logger = logging.getLogger(__name__)
+
 try:
     from pinecone import Pinecone, ServerlessSpec
     PINECONE_AVAILABLE = True
 except ImportError:
     PINECONE_AVAILABLE = False
     logger.warning("Pinecone not available. Install with: pip install pinecone-client")
-
-logger = logging.getLogger(__name__)
 
 class GeminiEmbeddingSearchEngine:
     """Enhanced search engine using Gemini embeddings with Pinecone vector database"""
@@ -160,14 +160,23 @@ class GeminiEmbeddingSearchEngine:
                 if time_since_last_call < self.min_call_interval:
                     await asyncio.sleep(self.min_call_interval - time_since_last_call)
                 
-                # Get embedding from Gemini
-                result = await asyncio.to_thread(
-                    genai.embed_content,
-                    model=self.gemini_model_name,
-                    content=text,
-                    task_type=task_type,
-                    title=f"Document chunk" if task_type == "retrieval_document" else "Query"
-                )
+                # Get embedding from Gemini (title only for retrieval_document)
+                if task_type == "retrieval_document":
+                    result = await asyncio.to_thread(
+                        genai.embed_content,
+                        model=self.gemini_model_name,
+                        content=text,
+                        task_type=task_type,
+                        title="Document chunk"
+                    )
+                else:
+                    # For retrieval_query, don't include title
+                    result = await asyncio.to_thread(
+                        genai.embed_content,
+                        model=self.gemini_model_name,
+                        content=text,
+                        task_type=task_type
+                    )
                 
                 embeddings.append(result['embedding'])
                 self.last_gemini_call = time.time()

@@ -7,7 +7,6 @@ import logging
 import json
 from typing import List, Dict, Any
 from datetime import datetime
-from dataclasses import asdict
 
 # FastAPI imports
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
@@ -271,9 +270,9 @@ class EnhancedDocumentQueryAPI:
         # Process normally
         response = await self.process_query(query, file)
         
-        # Cache the response
+        # Cache the response (convert Pydantic model to dict)
         await self.cache_manager.set_query_response(
-            query, doc_hash, asdict(response)
+            query, doc_hash, response.model_dump()
         )
         
         response.cache_hit = False
@@ -567,7 +566,23 @@ async def root():
 # CLI Runner (for development)
 # =============================================================================
 
+def setup_event_loop():
+    """Setup proper event loop policy for Windows + PostgreSQL compatibility"""
+    import sys
+    import asyncio
+
+    if sys.platform == "win32":
+        try:
+            # Set Windows selector event loop policy for psycopg compatibility
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            print("🔧 Set Windows selector event loop policy for PostgreSQL compatibility")
+        except Exception as e:
+            print(f"⚠️ Could not set event loop policy: {e}")
+
 if __name__ == "__main__":
+    # Setup event loop policy first
+    setup_event_loop()
+
     # Check for API key (allow demo_key for testing)
     api_key = config.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
     if not api_key or api_key == "your_gemini_api_key_here":
@@ -576,8 +591,10 @@ if __name__ == "__main__":
         print("Get your API key from: https://makersuite.google.com/app/apikey")
         print("Starting server anyway...")
 
-    print("Starting Enhanced Document Query API...")
-    print("Access API documentation at: http://localhost:3000/docs")
+    print("🚀 Starting Enhanced Document Query API...")
+    print("📚 Access API documentation at: http://localhost:3000/docs")
+    print("🔗 Pinecone vector database: Connected")
+    print("🐘 PostgreSQL database: Attempting connection...")
 
     uvicorn.run(
         "main:app",

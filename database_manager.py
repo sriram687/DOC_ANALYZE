@@ -85,18 +85,21 @@ class DatabaseManager:
         import asyncio
         import sys
 
-        # Set correct event loop policy for Windows + psycopg
+        # Set correct event loop policy for Windows + psycopg BEFORE creating engine
         if sys.platform == "win32":
             try:
-                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-                logger.info("🔧 Set Windows selector event loop policy for psycopg compatibility")
+                # Get current event loop policy
+                current_policy = asyncio.get_event_loop_policy()
+                if not isinstance(current_policy, asyncio.WindowsSelectorEventLoopPolicy):
+                    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+                    logger.info("🔧 Set Windows selector event loop policy for psycopg compatibility")
             except Exception as e:
                 logger.warning(f"Could not set event loop policy: {e}")
 
-        # Try asyncpg first, then psycopg as fallback
+        # Try psycopg first (better Windows compatibility), then asyncpg
         drivers_to_try = [
-            ("asyncpg", self.async_database_url),
-            ("psycopg", self.psycopg_url)
+            ("psycopg", self.psycopg_url),
+            ("asyncpg", self.async_database_url)
         ]
 
         for driver_name, url in drivers_to_try:

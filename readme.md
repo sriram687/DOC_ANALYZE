@@ -1,6 +1,19 @@
-# Enhanced Document Query API with Google Gemini
+# 🚀 Enhanced Document Query API
 
-A comprehensive AI-powered document analysis system that leverages Google Gemini for intelligent query processing, advanced embedding search, and document insights.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-green.svg)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A sophisticated AI-powered document analysis system that leverages **Google Gemini AI**, **Pinecone vector database**, and **PostgreSQL** for intelligent document processing, semantic search, and real-time querying with advanced caching and analytics.
+
+## 🏗️ Technology Stack
+
+- **🤖 AI & ML**: Google Gemini AI, Sentence Transformers
+- **🗄️ Databases**: Pinecone (Vector), PostgreSQL (Relational)
+- **🌐 Web Framework**: FastAPI, Uvicorn
+- **📄 Document Processing**: PyMuPDF, python-docx
+- **⚡ Caching**: Redis (optional)
+- **🔧 Infrastructure**: Cloud-deployable, Production-ready
 
 ## ✨ Features
 
@@ -69,6 +82,8 @@ python main.py
 - **Server**: http://localhost:3000
 - **API Documentation**: http://localhost:3000/docs
 - **Health Check**: http://localhost:3000/health
+
+
 
 ### 4. Install optional dependencies
 
@@ -309,25 +324,44 @@ Logs include:
 - Error details and stack traces
 - Performance metrics
 
+## 📊 Project Status
+
+![GitHub last commit](https://img.shields.io/github/last-commit/username/enhanced-document-query-api)
+![GitHub issues](https://img.shields.io/github/issues/username/enhanced-document-query-api)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/username/enhanced-document-query-api)
+![GitHub stars](https://img.shields.io/github/stars/username/enhanced-document-query-api)
+
 ## 🤝 Contributing
 
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+### Quick Contribution Steps
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
-[Your License Here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
+## 📚 Documentation
 
-For issues and questions:
-- Create GitHub issues for bugs
-- Check documentation for configuration
-- Review logs for debugging information
+- **[API Documentation](http://localhost:3000/docs)** - Interactive API docs
+- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
+- **[Changelog](CHANGELOG.md)** - Version history
+- **[License](LICENSE)** - MIT License
+
+## 🙏 Acknowledgments
+
+- **Google AI** for the Gemini API
+- **Pinecone** for vector database services
+- **FastAPI** for the excellent web framework
+- **The open-source community** for amazing tools and libraries
 
 ---
 
-**Built with ❤️ using Google Gemini AI**
+**⭐ Star this repository if you find it helpful!**
+
+**Built with ❤️ using Google Gemini AI, Pinecone, and PostgreSQL**
