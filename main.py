@@ -1,12 +1,18 @@
+import os
 import uuid
 import time
 import hashlib
 import asyncio
 import logging
+import json
 from typing import List, Dict, Any
 from datetime import datetime
 from dataclasses import asdict
-from fastapi import UploadFile, HTTPException
+
+# FastAPI imports
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 from models import QueryResponse, DocumentAnalysis, ComparisonResult
 from document_processor import AdvancedDocumentProcessor
@@ -16,7 +22,10 @@ from cache_manager import CacheManager
 from query_optimizer import QueryOptimizer
 from document_analytics import DocumentAnalytics
 from batch_processor import BatchProcessor, StreamingProcessor
+from config import config
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class EnhancedDocumentQueryAPI:
@@ -34,18 +43,55 @@ class EnhancedDocumentQueryAPI:
         self.analytics = DocumentAnalytics()
         self.batch_processor = BatchProcessor(self)
         self.streaming_processor = StreamingProcessor()
-        
+        self._initialized = False
+
+    async def initialize(self):
+        """Initialize the API components"""
+        if not self._initialized:
+            await self.search_engine.initialize()
+            self._initialized = True
+            logger.info("API components initialized successfully")
+
     async def process_query(self, query: str, file: UploadFile) -> QueryResponse:
         """Main processing pipeline"""
         start_time = time.time()
-        
+
+        # Ensure initialization
+        await self.initialize()
+
         try:
             # Step 1: Document Ingestion
             logger.info("Extracting text from document...")
             document_text = await self.document_processor.process_document(file)
-            
-            # Step 2: Create search index
+
+            # Step 2: Store document in PostgreSQL
+            content_hash = hashlib.sha256(document_text.encode()).hexdigest()
+
+            # Try to check if document already exists (optional)
             document_id = str(uuid.uuid4())
+            if self.search_engine.db_initialized and self.search_engine.db_manager:
+                try:
+                    existing_doc = await self.search_engine.db_manager.get_document_by_hash(content_hash)
+                    if existing_doc:
+                        document_id = existing_doc["id"]
+                        logger.info(f"📄 Document already exists with ID: {document_id}")
+                    else:
+                        # Store new document
+                        stored_id = await self.search_engine.db_manager.store_document(
+                            filename=file.filename,
+                            content=document_text,
+                            content_hash=content_hash,
+                            metadata={"file_size": len(document_text)}
+                        )
+                        document_id = stored_id
+                        logger.info(f"✅ Stored new document with ID: {document_id}")
+                except Exception as e:
+                    logger.warning(f"❌ Database operation failed: {e}")
+                    logger.info(f"📝 Using generated document ID: {document_id}")
+            else:
+                logger.info(f"📝 Database not available, using generated ID: {document_id}")
+
+            # Step 3: Create embeddings and search index
             logger.info("Creating embeddings and search index...")
             await self.search_engine.add_document(document_text, document_id)
             
@@ -403,3 +449,140 @@ class EnhancedDocumentQueryAPI:
                 "differences": [],
                 "summary": f"Error analyzing aspect: {str(e)}"
             }
+
+# =============================================================================
+# FastAPI Application Setup
+# =============================================================================
+
+# Initialize API
+enhanced_api = EnhancedDocumentQueryAPI()
+app = FastAPI(
+    title="Enhanced Document Query API",
+    description="AI-powered document analysis using Google Gemini with caching, OCR, and advanced features",
+    version="2.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# =============================================================================
+# API Endpoints
+# =============================================================================
+
+@app.post("/ask-document", response_model=QueryResponse)
+async def ask_document(
+    query: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Main endpoint for document queries
+
+    - **query**: Natural language question about the document
+    - **file**: Document file (PDF, DOCX, EML, TXT, PNG, JPG)
+    """
+    return await enhanced_api.process_query(query, file)
+
+@app.post("/ask-document-hybrid", response_model=QueryResponse)
+async def ask_document_hybrid(
+    query: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Enhanced endpoint with hybrid search
+
+    - **query**: Natural language question about the document
+    - **file**: Document file (PDF, DOCX, EML, TXT, PNG, JPG)
+    """
+    return await enhanced_api.process_query_with_hybrid_search(query, file)
+
+@app.post("/ask-document-cached", response_model=QueryResponse)
+async def ask_document_cached(
+    query: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Endpoint with caching support
+
+    - **query**: Natural language question about the document
+    - **file**: Document file (PDF, DOCX, EML, TXT, PNG, JPG)
+    """
+    return await enhanced_api.process_query_with_cache(query, file)
+
+@app.post("/analyze-document", response_model=DocumentAnalysis)
+async def analyze_document(file: UploadFile = File(...)):
+    """
+    Analyze document and provide insights
+
+    - **file**: Document file to analyze
+    """
+    return await enhanced_api.analyze_document_insights(file)
+
+@app.post("/suggest-queries")
+async def suggest_queries(
+    file: UploadFile = File(...),
+    num_suggestions: int = Form(5)
+):
+    """
+    Generate suggested queries based on document content
+
+    - **file**: Document file to analyze
+    - **num_suggestions**: Number of suggestions to generate (default: 5)
+    """
+    suggestions = await enhanced_api.suggest_queries(file, num_suggestions)
+    return {"suggestions": suggestions}
+
+@app.get("/health")
+async def health_check():
+    """Basic health check endpoint"""
+    return {
+        "status": "healthy",
+        "model": "gemini-2.0-flash",
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Enhanced Document Query API with Google Gemini",
+        "endpoints": {
+            "POST /ask-document": "Submit document and query",
+            "POST /ask-document-hybrid": "Submit document and query with hybrid search",
+            "POST /ask-document-cached": "Submit document and query with caching",
+            "POST /analyze-document": "Analyze document for insights",
+            "POST /suggest-queries": "Generate suggested queries",
+            "GET /health": "Health check",
+            "GET /docs": "API documentation"
+        },
+        "supported_formats": [".pdf", ".docx", ".eml", ".txt", ".png", ".jpg"]
+    }
+
+# =============================================================================
+# CLI Runner (for development)
+# =============================================================================
+
+if __name__ == "__main__":
+    # Check for API key (allow demo_key for testing)
+    api_key = config.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
+    if not api_key or api_key == "your_gemini_api_key_here":
+        print("Warning: GEMINI_API_KEY not set or using placeholder value")
+        print("Some features may not work properly without a valid Google AI API key")
+        print("Get your API key from: https://makersuite.google.com/app/apikey")
+        print("Starting server anyway...")
+
+    print("Starting Enhanced Document Query API...")
+    print("Access API documentation at: http://localhost:3000/docs")
+
+    uvicorn.run(
+        "main:app",
+        host="127.0.0.1",
+        port=3000,
+        reload=False,
+        log_level="info"
+    )

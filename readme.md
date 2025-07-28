@@ -37,19 +37,38 @@ The system is modularized into the following components:
 ### 1. Clone the repository
 ```bash
 git clone <repository-url>
-cd document-query-api
+cd BAJAJ_FINSERV
 ```
 
-### 2. Install dependencies
+### 2. Create virtual environment
+```bash
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Linux/Mac
+```
+
+### 3. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Set up environment variables
+### 4. Set up environment variables
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
+# Update .env file with your API keys:
+# - GEMINI_API_KEY (Google AI)
+# - PINECONE_API_KEY (Pinecone)
+# - DATABASE_URL (PostgreSQL/Neon)
 ```
+
+### 5. Run the application
+```bash
+python main.py
+```
+
+### 6. Access the API
+- **Server**: http://localhost:3000
+- **API Documentation**: http://localhost:3000/docs
+- **Health Check**: http://localhost:3000/health
 
 ### 4. Install optional dependencies
 

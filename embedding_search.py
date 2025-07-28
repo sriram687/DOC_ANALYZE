@@ -6,38 +6,69 @@ import logging
 from typing import List, Dict, Any, Optional
 
 import google.generativeai as genai
-import numpy as np
-import faiss
 
 from models import DocumentChunk
 from config import config
+from database_manager import DatabaseManager
 
 try:
+    import numpy as np
     from sentence_transformers import SentenceTransformer
-    SENTENCE_TRANSFORMERS_AVAILABLE = True
+    ML_AVAILABLE = True
 except ImportError:
-    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    ML_AVAILABLE = False
+    # Create dummy classes for when ML libraries are not available
+    class SentenceTransformer:
+        def __init__(self, *args, **kwargs):
+            pass
+        def encode(self, *args, **kwargs):
+            return []
+
+try:
+    from pinecone import Pinecone, ServerlessSpec
+    PINECONE_AVAILABLE = True
+except ImportError:
+    PINECONE_AVAILABLE = False
+    logger.warning("Pinecone not available. Install with: pip install pinecone-client")
 
 logger = logging.getLogger(__name__)
 
 class GeminiEmbeddingSearchEngine:
-    """Enhanced search engine using Gemini embeddings with fallback to sentence-transformers"""
-    
+    """Enhanced search engine using Gemini embeddings with Pinecone vector database"""
+
     def __init__(self, use_gemini_primary: bool = True):
         """
-        Initialize with Gemini as primary embedding model
-        
+        Initialize with Gemini as primary embedding model and Pinecone for vector storage
+
         Args:
             use_gemini_primary: Whether to use Gemini as primary embedding model
         """
         self.use_gemini_primary = use_gemini_primary
-        
+
         # Gemini embedding configuration
         self.gemini_model_name = "models/text-embedding-004"  # Latest Gemini embedding model
         self.gemini_dimension = 768  # Gemini embedding dimension
-        
+
+        # Initialize database manager (lazy initialization)
+        self.db_manager = None
+        self.db_initialized = False
+
+        # Initialize Pinecone
+        self.pc = None
+        self.index = None
+        if PINECONE_AVAILABLE and config.PINECONE_API_KEY:
+            try:
+                self.pc = Pinecone(api_key=config.PINECONE_API_KEY)
+                self._initialize_pinecone_index()
+                logger.info("Pinecone initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Pinecone: {e}")
+                self.pc = None
+        else:
+            logger.warning("Pinecone not available or API key not set")
+
         # Fallback to sentence transformers
-        if SENTENCE_TRANSFORMERS_AVAILABLE:
+        if ML_AVAILABLE:
             try:
                 self.sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
                 self.sentence_transformer_dimension = 384
@@ -47,23 +78,68 @@ class GeminiEmbeddingSearchEngine:
                 self.sentence_transformer = None
         else:
             self.sentence_transformer = None
-        
-        # Initialize FAISS index based on primary model
+
+        # Set dimension based on primary model
         if self.use_gemini_primary:
             self.dimension = self.gemini_dimension
             logger.info("Using Gemini embeddings as primary")
         else:
-            self.dimension = self.sentence_transformer_dimension
+            self.dimension = self.sentence_transformer_dimension if ML_AVAILABLE else 768
             logger.info("Using Sentence Transformer embeddings as primary")
-            
-        self.index = faiss.IndexFlatIP(self.dimension)  # Inner product for cosine similarity
+
         self.chunks: List[DocumentChunk] = []
-        
+
         # Rate limiting for Gemini API
         self.last_gemini_call = 0
         self.min_call_interval = 1.0  # Minimum 1 second between calls
+
+    def _initialize_pinecone_index(self):
+        """Initialize or connect to Pinecone index"""
+        try:
+            index_name = config.PINECONE_INDEX_NAME
+
+            # Check if index exists
+            if not self.pc.has_index(index_name):
+                logger.info(f"Creating Pinecone index: {index_name}")
+                self.pc.create_index(
+                    name=index_name,
+                    dimension=self.gemini_dimension,
+                    metric="cosine",
+                    spec=ServerlessSpec(
+                        cloud="aws",
+                        region=config.PINECONE_ENVIRONMENT
+                    )
+                )
+                # Wait for index to be ready
+                import time
+                time.sleep(10)
+
+            # Connect to the index
+            self.index = self.pc.Index(index_name)
+            logger.info(f"Connected to Pinecone index: {index_name}")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize Pinecone index: {e}")
+            self.index = None
+
+    async def initialize(self):
+        """Initialize the search engine and database"""
+        if not self.db_initialized:
+            try:
+                # Lazy initialize database manager
+                if self.db_manager is None:
+                    self.db_manager = DatabaseManager()
+
+                await self.db_manager.initialize()
+                self.db_initialized = True
+                logger.info("✅ PostgreSQL database initialized successfully")
+            except Exception as e:
+                logger.warning(f"❌ Database initialization failed: {e}")
+                logger.warning("Continuing without database storage")
+                self.db_initialized = False
+                self.db_manager = None
         
-    async def _get_gemini_embeddings(self, texts: List[str], task_type: str = "retrieval_document") -> np.ndarray:
+    async def _get_gemini_embeddings(self, texts: List[str], task_type: str = "retrieval_document") -> List[List[float]]:
         """
         Get embeddings from Gemini with rate limiting and error handling
         
@@ -112,37 +188,42 @@ class GeminiEmbeddingSearchEngine:
                     fallback_embedding = fallback_embedding[0]
                     if len(fallback_embedding) < self.gemini_dimension:
                         # Pad with zeros
-                        padded = np.zeros(self.gemini_dimension)
-                        padded[:len(fallback_embedding)] = fallback_embedding
-                        embeddings.append(padded.tolist())
+                        if ML_AVAILABLE:
+                            padded = np.zeros(self.gemini_dimension)
+                            padded[:len(fallback_embedding)] = fallback_embedding
+                            embeddings.append(padded.tolist())
+                        else:
+                            padded = [0.0] * self.gemini_dimension
+                            padded[:len(fallback_embedding)] = fallback_embedding
+                            embeddings.append(padded)
                     else:
                         # Truncate
                         embeddings.append(fallback_embedding[:self.gemini_dimension].tolist())
                 else:
                     # Return zero embedding as last resort
                     embeddings.append([0.0] * self.gemini_dimension)
-        
-        return np.array(embeddings)
+
+        return embeddings if not ML_AVAILABLE else np.array(embeddings)
     
-    async def _get_sentence_transformer_embeddings(self, texts: List[str]) -> np.ndarray:
+    async def _get_sentence_transformer_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Get embeddings from sentence transformer"""
         if self.sentence_transformer is None:
             raise ValueError("Sentence transformer not available")
-        
+
         embeddings = await asyncio.to_thread(self.sentence_transformer.encode, texts)
-        return embeddings
+        return embeddings.tolist() if ML_AVAILABLE else embeddings
     
     async def add_document(self, text: str, document_id: str) -> List[DocumentChunk]:
-        """Process document and add to search index with Gemini embeddings"""
+        """Process document and add to Pinecone index and PostgreSQL"""
         start_time = time.time()
-        
+
         # Chunk the document
         chunks = self.chunk_document(text, document_id)
         logger.info(f"Created {len(chunks)} chunks for document {document_id}")
-        
+
         # Get texts for embedding
         texts = [chunk.text for chunk in chunks]
-        
+
         # Get embeddings based on primary model
         try:
             if self.use_gemini_primary:
@@ -151,7 +232,7 @@ class GeminiEmbeddingSearchEngine:
             else:
                 logger.info("Generating Sentence Transformer embeddings...")
                 embeddings = await self._get_sentence_transformer_embeddings(texts)
-                
+
         except Exception as e:
             logger.error(f"Error generating embeddings: {e}")
             # Fallback to alternative method
@@ -160,33 +241,81 @@ class GeminiEmbeddingSearchEngine:
                 embeddings = await self._get_sentence_transformer_embeddings(texts)
             else:
                 raise e
-        
-        # Normalize embeddings for cosine similarity
-        embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-        
-        # Add to FAISS index
-        self.index.add(embeddings.astype('float32'))
-        
-        # Store chunks with embeddings
-        for chunk, embedding in zip(chunks, embeddings):
-            chunk.embedding = embedding.tolist()
+
+        # Prepare vectors for Pinecone
+        vectors_to_upsert = []
+        chunk_data_for_db = []
+
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            # Generate unique ID for Pinecone
+            vector_id = f"{document_id}_{i}_{uuid.uuid4().hex[:8]}"
+
+            # Prepare vector for Pinecone
+            if isinstance(embedding, list):
+                embedding_list = embedding
+            else:
+                embedding_list = embedding.tolist()
+
+            vectors_to_upsert.append({
+                "id": vector_id,
+                "values": embedding_list,
+                "metadata": {
+                    "document_id": document_id,
+                    "chunk_index": i,
+                    "text": chunk.text[:1000],  # Limit metadata text size
+                    "chunk_id": chunk.id
+                }
+            })
+
+            # Prepare chunk data for database
+            chunk_data_for_db.append({
+                "content": chunk.text,
+                "metadata": {
+                    "chunk_index": i,
+                    "start_char": getattr(chunk, 'start_char', 0),
+                    "end_char": getattr(chunk, 'end_char', len(chunk.text))
+                },
+                "embedding_id": vector_id
+            })
+
+            # Store embedding in chunk object
+            chunk.embedding = embedding_list
             self.chunks.append(chunk)
-        
+
+        # Upsert vectors to Pinecone
+        if self.index and vectors_to_upsert:
+            try:
+                self.index.upsert(vectors=vectors_to_upsert)
+                logger.info(f"Upserted {len(vectors_to_upsert)} vectors to Pinecone")
+            except Exception as e:
+                logger.error(f"Failed to upsert vectors to Pinecone: {e}")
+
+        # Store chunks in PostgreSQL (optional)
+        if self.db_initialized and self.db_manager:
+            try:
+                await self.db_manager.store_document_chunks(document_id, chunk_data_for_db)
+                logger.info(f"✅ Stored {len(chunk_data_for_db)} chunks in PostgreSQL")
+            except Exception as e:
+                logger.warning(f"❌ Failed to store chunks in PostgreSQL: {e}")
+        else:
+            logger.info("📝 Database not available, storing only in Pinecone")
+
         processing_time = time.time() - start_time
         logger.info(f"Added {len(chunks)} chunks with embeddings in {processing_time:.2f}s")
-        
+
         return chunks
     
-    async def search_similar_chunks(self, query: str, k: int = None) -> List[DocumentChunk]:
-        """Find most similar chunks to query using Gemini embeddings"""
+    async def search_similar_chunks(self, query: str, k: int = None, document_id: str = None) -> List[DocumentChunk]:
+        """Find most similar chunks to query using Pinecone vector search"""
         if k is None:
             k = config.TOP_K_CHUNKS
-        
-        if not self.chunks:
+
+        if not self.index:
+            logger.warning("Pinecone index not available")
             return []
-        
+
         start_time = time.time()
-        
+
         # Generate query embedding
         try:
             if self.use_gemini_primary:
@@ -200,27 +329,52 @@ class GeminiEmbeddingSearchEngine:
                 query_embeddings = await self._get_sentence_transformer_embeddings([query])
             else:
                 return []
-        
-        # Normalize query embedding
-        query_embedding = query_embeddings[0:1]
-        query_embedding = query_embedding / np.linalg.norm(query_embedding, axis=1, keepdims=True)
-        
-        # Search in FAISS index
-        scores, indices = self.index.search(query_embedding.astype('float32'), k)
-        
-        # Return matching chunks with scores
-        results = []
-        for score, idx in zip(scores[0], indices[0]):
-            if idx < len(self.chunks) and score > 0.3:  # Minimum similarity threshold
-                chunk = self.chunks[idx]
-                # Add similarity score to metadata
-                chunk.metadata['similarity_score'] = float(score)
-                results.append(chunk)
-        
-        search_time = time.time() - start_time
-        logger.info(f"Found {len(results)} relevant chunks in {search_time:.2f}s")
-        
-        return results
+
+        # Get query embedding vector
+        if isinstance(query_embeddings, list):
+            query_vector = query_embeddings[0] if len(query_embeddings) > 0 else query_embeddings
+        else:
+            query_vector = query_embeddings[0].tolist()
+
+        # Prepare query filter
+        query_filter = {}
+        if document_id:
+            query_filter["document_id"] = document_id
+
+        # Search in Pinecone
+        try:
+            search_results = self.index.query(
+                vector=query_vector,
+                top_k=k,
+                include_metadata=True,
+                filter=query_filter if query_filter else None
+            )
+
+            # Convert Pinecone results to DocumentChunk objects
+            results = []
+            for match in search_results.matches:
+                if match.score > config.CONFIDENCE_THRESHOLD:
+                    # Create DocumentChunk from Pinecone metadata
+                    chunk = DocumentChunk(
+                        id=match.metadata.get("chunk_id", match.id),
+                        document_id=match.metadata.get("document_id", ""),
+                        text=match.metadata.get("text", ""),
+                        metadata={
+                            **match.metadata,
+                            "similarity_score": float(match.score),
+                            "pinecone_id": match.id
+                        }
+                    )
+                    results.append(chunk)
+
+            search_time = time.time() - start_time
+            logger.info(f"Found {len(results)} relevant chunks in Pinecone in {search_time:.2f}s")
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error searching in Pinecone: {e}")
+            return []
     
     def chunk_document(self, text: str, document_id: str) -> List[DocumentChunk]:
         """Split document into semantic chunks with enhanced logic"""
@@ -287,20 +441,17 @@ class GeminiEmbeddingSearchEngine:
     
     def _split_into_sentences(self, text: str) -> List[str]:
         """Enhanced sentence splitting"""
-        # More sophisticated sentence splitting
-        # Handle common abbreviations and edge cases
-        abbreviations = r'(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|Inc|Ltd|Corp|Co)'
-        
-        # Split on sentence endings, but not after abbreviations
-        sentences = re.split(r'(?<!' + abbreviations + r')(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\!|\?)\s+', text)
-        
+        # Simple but effective sentence splitting
+        # Split on sentence endings followed by whitespace and capital letter
+        sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
+
         # Clean and filter sentences
         clean_sentences = []
         for sentence in sentences:
             sentence = sentence.strip()
             if len(sentence) > 10:  # Filter out very short fragments
                 clean_sentences.append(sentence)
-        
+
         return clean_sentences
     
     async def hybrid_search(self, query: str, k: int = None) -> List[Dict[str, Any]]:
