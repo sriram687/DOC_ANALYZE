@@ -17,7 +17,7 @@ class GeminiParser:
             raise ValueError("GEMINI_API_KEY environment variable is required")
         
         genai.configure(api_key=config.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.model = genai.GenerativeModel(config.GEMINI_CHAT_MODEL)
     
     async def parse_query_intent(self, query: str) -> Dict[str, Any]:
         """Extract structured intent from natural language query"""
@@ -37,44 +37,75 @@ class GeminiParser:
         
         Only return the JSON object, no additional text.
         """
-        
-        try:
-            response = await asyncio.to_thread(
-                self.model.generate_content,
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.1,
-                    max_output_tokens=500
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.to_thread(
+                    self.model.generate_content,
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.1,
+                        max_output_tokens=500
+                    )
                 )
-            )
 
-            # Clean and parse the response
-            response_text = response.text.strip()
-            logger.debug(f"Raw Gemini response: {response_text}")
+                # Check if response exists and has content
+                if not response:
+                    logger.warning(f"No response from Gemini (attempt {attempt + 1})")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+                        continue
+                    raise ValueError("No response from Gemini after retries")
 
-            # Try to extract JSON from the response
-            if response_text.startswith('```json'):
-                # Remove markdown code blocks
-                response_text = response_text.replace('```json', '').replace('```', '').strip()
-            elif response_text.startswith('```'):
-                # Remove any code blocks
-                response_text = response_text.replace('```', '').strip()
+                # Clean and parse the response
+                if hasattr(response, 'text') and response.text:
+                    response_text = response.text.strip()
+                    logger.debug(f"Raw Gemini response: {response_text}")
 
-            # Try to find JSON object in the response
-            start_idx = response_text.find('{')
-            end_idx = response_text.rfind('}') + 1
-            if start_idx != -1 and end_idx > start_idx:
-                json_text = response_text[start_idx:end_idx]
-                return json.loads(json_text)
-            else:
-                # If no JSON found, try parsing the whole response
-                return json.loads(response_text)
+                    # Check if response is empty
+                    if not response_text:
+                        logger.warning(f"Empty response from Gemini (attempt {attempt + 1})")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(1)
+                            continue
+                        raise ValueError("Empty response from Gemini after retries")
 
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parsing error: {str(e)}")
-            logger.error(f"Response text: {response.text if 'response' in locals() else 'No response'}")
-        except Exception as e:
-            logger.error(f"Error parsing query intent: {str(e)}")
+                    # Try to extract JSON from the response
+                    if response_text.startswith('```json'):
+                        # Remove markdown code blocks
+                        response_text = response_text.replace('```json', '').replace('```', '').strip()
+                    elif response_text.startswith('```'):
+                        # Remove any code blocks
+                        response_text = response_text.replace('```', '').strip()
+
+                    # Try to find JSON object in the response
+                    start_idx = response_text.find('{')
+                    end_idx = response_text.rfind('}') + 1
+                    if start_idx != -1 and end_idx > start_idx:
+                        json_text = response_text[start_idx:end_idx]
+                        return json.loads(json_text)
+                    else:
+                        # If no JSON found, try parsing the whole response
+                        return json.loads(response_text)
+                else:
+                    logger.warning(f"No text in Gemini response (attempt {attempt + 1})")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+                        continue
+                    raise ValueError("No text in Gemini response after retries")
+
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error (attempt {attempt + 1}): {str(e)}")
+                logger.error(f"Response text: {response_text if 'response_text' in locals() else 'No response text'}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+            except Exception as e:
+                logger.error(f"Error parsing query intent (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
 
         # Fallback basic parsing
         logger.info("Using fallback query intent parsing")
@@ -108,22 +139,57 @@ class GeminiParser:
         Only return the JSON array, no additional text.
         """
         
-        try:
-            response = await asyncio.to_thread(
-                self.model.generate_content,
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.2,
-                    max_output_tokens=2000
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.to_thread(
+                    self.model.generate_content,
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.2,
+                        max_output_tokens=2000
+                    )
                 )
-            )
-            return json.loads(response.text.strip())
-        except Exception as e:
-            logger.error(f"Error evaluating clause relevance: {str(e)}")
-            # Fallback scoring
-            return [{"chunk_id": f"CHUNK_{i}", "relevance_score": 0.5, 
-                    "key_phrases": [], "contains_conditions": False, 
-                    "summary": "Could not analyze"} for i in range(len(chunks))]
+
+                if response and hasattr(response, 'text') and response.text:
+                    response_text = response.text.strip()
+                    if response_text:
+                        # Try to extract JSON from the response
+                        if response_text.startswith('```json'):
+                            response_text = response_text.replace('```json', '').replace('```', '').strip()
+                        elif response_text.startswith('```'):
+                            response_text = response_text.replace('```', '').strip()
+
+                        # Try to find JSON array in the response
+                        start_idx = response_text.find('[')
+                        end_idx = response_text.rfind(']') + 1
+                        if start_idx != -1 and end_idx > start_idx:
+                            json_text = response_text[start_idx:end_idx]
+                            return json.loads(json_text)
+                        else:
+                            return json.loads(response_text)
+
+                logger.warning(f"Empty or invalid response from Gemini (attempt {attempt + 1})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error in clause relevance (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+            except Exception as e:
+                logger.error(f"Error evaluating clause relevance (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+
+        # Fallback scoring after all retries failed
+        logger.warning("Using fallback clause relevance scoring")
+        return [{"chunk_id": f"CHUNK_{i}", "relevance_score": 0.5,
+                "key_phrases": [], "contains_conditions": False,
+                "summary": "Could not analyze"} for i in range(len(chunks))]
     
     async def generate_final_answer(self, query: str, relevant_chunks: List[Dict[str, Any]], 
                                   query_intent: Dict[str, Any]) -> Dict[str, Any]:
@@ -159,22 +225,58 @@ class GeminiParser:
         Only return the JSON object, no additional text.
         """
         
-        try:
-            response = await asyncio.to_thread(
-                self.model.generate_content,
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.3,
-                    max_output_tokens=1500
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.to_thread(
+                    self.model.generate_content,
+                    prompt,
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.3,
+                        max_output_tokens=1500
+                    )
                 )
-            )
-            return json.loads(response.text.strip())
-        except Exception as e:
-            logger.error(f"Error generating final answer: {str(e)}")
-            return {
-                "answer": "Unable to process the query due to technical issues.",
-                "conditions": [],
-                "evidence": [],
-                "confidence": 0.0,
-                "caveats": ["Technical error occurred during processing"]
-            }
+
+                if response and hasattr(response, 'text') and response.text:
+                    response_text = response.text.strip()
+                    if response_text:
+                        # Try to extract JSON from the response
+                        if response_text.startswith('```json'):
+                            response_text = response_text.replace('```json', '').replace('```', '').strip()
+                        elif response_text.startswith('```'):
+                            response_text = response_text.replace('```', '').strip()
+
+                        # Try to find JSON object in the response
+                        start_idx = response_text.find('{')
+                        end_idx = response_text.rfind('}') + 1
+                        if start_idx != -1 and end_idx > start_idx:
+                            json_text = response_text[start_idx:end_idx]
+                            return json.loads(json_text)
+                        else:
+                            return json.loads(response_text)
+
+                logger.warning(f"Empty or invalid response from Gemini for final answer (attempt {attempt + 1})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error in final answer (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+            except Exception as e:
+                logger.error(f"Error generating final answer (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+
+        # Fallback response after all retries failed
+        logger.warning("Using fallback final answer")
+        return {
+            "answer": "Unable to process the query due to technical issues. Please try again.",
+            "conditions": [],
+            "evidence": [],
+            "confidence": 0.0,
+            "caveats": ["Technical error occurred during processing"]
+        }

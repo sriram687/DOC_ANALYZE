@@ -10,6 +10,7 @@ class DocumentChunk:
     id: str
     text: str
     metadata: Dict[str, Any]
+    document_id: str = ""
     embedding: Optional[List[float]] = None
 
 class ClauseMatch(BaseModel):
@@ -45,3 +46,10 @@ class ComparisonResult(BaseModel):
     aspect_comparisons: Dict[str, Any]
     similarities: Dict[str, Any]
     differences: Dict[str, Any]
+
+class CleanQueryResponse(BaseModel):
+    query: str
+    answer: str
+    conditions: List[str] = []
+    confidence: float
+    processing_time: float

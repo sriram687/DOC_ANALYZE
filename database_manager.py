@@ -55,22 +55,13 @@ class DatabaseManager:
     
     def __init__(self):
         self.database_url = config.DATABASE_URL
-        # Prepare URLs for different drivers
-        if self.database_url.startswith("postgresql://"):
-            from urllib.parse import urlparse, urlunparse
-            parsed = urlparse(self.database_url)
 
-            # Create asyncpg URL (remove sslmode, use ssl)
-            asyncpg_query = "ssl=require" if "sslmode=require" in (parsed.query or "") else ""
-            asyncpg_parsed = parsed._replace(
-                scheme="postgresql+asyncpg",
-                query=asyncpg_query
-            )
-            self.async_database_url = urlunparse(asyncpg_parsed)
-
-            # Create psycopg URL (keep original format)
-            psycopg_parsed = parsed._replace(scheme="postgresql+psycopg")
-            self.psycopg_url = urlunparse(psycopg_parsed)
+        # Simplified URL handling
+        if self.database_url and self.database_url.startswith("postgresql://"):
+            # For asyncpg, replace postgresql:// with postgresql+asyncpg://
+            self.async_database_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://")
+            # For psycopg, replace postgresql:// with postgresql+psycopg://
+            self.psycopg_url = self.database_url.replace("postgresql://", "postgresql+psycopg://")
         else:
             self.async_database_url = self.database_url
             self.psycopg_url = self.database_url
@@ -106,19 +97,36 @@ class DatabaseManager:
             try:
                 logger.info(f"🔄 Trying PostgreSQL connection with {driver_name}...")
 
-                # Create async engine
-                self.async_engine = create_async_engine(
-                    url,
-                    pool_size=3,
-                    max_overflow=5,
-                    pool_timeout=20,
-                    pool_recycle=1800,
-                    echo=False,
-                    connect_args={
+                # Enhanced connection arguments for SSL and reliability
+                connect_args = {}
+                if driver_name == "asyncpg":
+                    connect_args = {
                         "server_settings": {
                             "application_name": "bajaj_finserv_api",
+                        },
+                        "ssl": "require",
+                        "command_timeout": 30,
+                        "server_settings": {
+                            "jit": "off"  # Disable JIT for better compatibility
                         }
-                    } if driver_name == "asyncpg" else {}
+                    }
+                else:  # psycopg
+                    connect_args = {
+                        "sslmode": "require",
+                        "connect_timeout": 30,
+                        "application_name": "bajaj_finserv_api"
+                    }
+
+                # Create async engine with enhanced configuration
+                self.async_engine = create_async_engine(
+                    url,
+                    pool_size=2,  # Reduced pool size for stability
+                    max_overflow=3,  # Reduced overflow
+                    pool_timeout=30,
+                    pool_recycle=3600,  # Recycle connections every hour
+                    pool_pre_ping=True,  # Test connections before use
+                    echo=False,
+                    connect_args=connect_args
                 )
 
                 # Create async session factory
@@ -128,25 +136,37 @@ class DatabaseManager:
                     expire_on_commit=False
                 )
 
-                # Test connection with timeout
+                # Test connection with timeout and retry logic
                 logger.info(f"📡 Testing {driver_name} connection...")
-                async with self.async_engine.begin() as conn:
-                    await asyncio.wait_for(
-                        conn.run_sync(Base.metadata.create_all),
-                        timeout=20.0
-                    )
-
-                logger.info(f"✅ PostgreSQL database initialized successfully with {driver_name}")
-                return
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        async with self.async_engine.begin() as conn:
+                            await asyncio.wait_for(
+                                conn.run_sync(Base.metadata.create_all),
+                                timeout=30.0
+                            )
+                        logger.info(f"✅ PostgreSQL database initialized successfully with {driver_name}")
+                        return
+                    except Exception as retry_error:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"⚠️ Connection attempt {attempt + 1} failed, retrying in 2s: {retry_error}")
+                            await asyncio.sleep(2)
+                        else:
+                            raise retry_error
 
             except Exception as e:
-                logger.warning(f"❌ {driver_name} connection failed: {e}")
+                logger.warning(f"❌ {driver_name} connection failed after retries: {e}")
                 if self.async_engine:
-                    await self.async_engine.dispose()
+                    try:
+                        await self.async_engine.dispose()
+                    except:
+                        pass
                     self.async_engine = None
 
                 # If this was the last driver, re-raise the exception
-                if driver_name == "psycopg2":
+                if driver_name == drivers_to_try[-1][0]:
+                    logger.error("❌ All database drivers failed")
                     raise
 
                 # Otherwise, try the next driver
@@ -157,7 +177,31 @@ class DatabaseManager:
     async def close(self):
         """Close database connections"""
         if self.async_engine:
-            await self.async_engine.dispose()
+            try:
+                await self.async_engine.dispose()
+            except Exception as e:
+                logger.warning(f"Error closing database connection: {e}")
+
+    async def ensure_connection(self):
+        """Ensure database connection is healthy, reconnect if needed"""
+        if not self.async_engine:
+            logger.info("🔄 Database engine not initialized, initializing...")
+            await self.initialize()
+            return
+
+        try:
+            # Test the connection
+            async with self.async_engine.connect() as conn:
+                await asyncio.wait_for(conn.execute("SELECT 1"), timeout=5.0)
+        except Exception as e:
+            logger.warning(f"⚠️ Database connection test failed: {e}")
+            logger.info("🔄 Attempting to reconnect...")
+            try:
+                await self.async_engine.dispose()
+            except:
+                pass
+            self.async_engine = None
+            await self.initialize()
 
     async def test_connection(self):
         """Test database connection without creating tables"""
@@ -225,29 +269,43 @@ class DatabaseManager:
                 return None
     
     async def store_document_chunks(self, document_id: str, chunks: List[Dict]) -> List[str]:
-        """Store document chunks in the database"""
-        async with self.AsyncSessionLocal() as session:
+        """Store document chunks in the database with connection recovery"""
+        # Ensure connection is healthy
+        await self.ensure_connection()
+
+        if not self.AsyncSessionLocal:
+            logger.warning("❌ Database session not available")
+            return []
+
+        max_retries = 2
+        for attempt in range(max_retries):
             try:
-                chunk_ids = []
-                for i, chunk_data in enumerate(chunks):
-                    chunk = DocumentChunk(
-                        document_id=document_id,
-                        chunk_index=i,
-                        content=chunk_data.get("content", ""),
-                        chunk_metadata=chunk_data.get("metadata", {}),
-                        embedding_id=chunk_data.get("embedding_id")
-                    )
-                    session.add(chunk)
-                    chunk_ids.append(str(chunk.id))
-                
-                await session.commit()
-                logger.info(f"Stored {len(chunks)} chunks for document {document_id}")
-                return chunk_ids
-                
+                async with self.AsyncSessionLocal() as session:
+                    chunk_ids = []
+                    for i, chunk_data in enumerate(chunks):
+                        chunk = DocumentChunk(
+                            document_id=document_id,
+                            chunk_index=i,
+                            content=chunk_data.get("content", ""),
+                            chunk_metadata=chunk_data.get("metadata", {}),
+                            embedding_id=chunk_data.get("embedding_id")
+                        )
+                        session.add(chunk)
+                        chunk_ids.append(str(chunk.id))
+
+                    await session.commit()
+                    logger.info(f"Stored {len(chunks)} chunks for document {document_id}")
+                    return chunk_ids
+
             except Exception as e:
-                await session.rollback()
-                logger.error(f"Failed to store document chunks: {e}")
-                raise
+                logger.warning(f"❌ Database operation failed (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    logger.info("🔄 Retrying database operation...")
+                    await asyncio.sleep(1)
+                    await self.ensure_connection()
+                else:
+                    logger.error(f"❌ Failed to store document chunks after {max_retries} attempts: {e}")
+                    return []
     
     async def get_document_chunks(self, document_id: str) -> List[Dict]:
         """Retrieve all chunks for a document"""

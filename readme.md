@@ -1,29 +1,46 @@
-# 🚀 Enhanced Document Query API
+# 🚀 Enhanced Document Query API with LangChain
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-green.svg)](https://fastapi.tiangolo.com/)
+[![LangChain](https://img.shields.io/badge/LangChain-0.1+-orange.svg)](https://langchain.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A sophisticated AI-powered document analysis system that leverages **Google Gemini AI**, **Pinecone vector database**, and **PostgreSQL** for intelligent document processing, semantic search, and real-time querying with advanced caching and analytics.
+A sophisticated AI-powered document analysis system that leverages **LangChain RAG (Retrieval-Augmented Generation)**, **Google Gemini AI**, **Pinecone vector database**, and **PostgreSQL** for intelligent document processing, semantic search, and real-time querying with advanced caching and analytics.
 
 ## 🏗️ Technology Stack
 
-- **🤖 AI & ML**: Google Gemini AI, Sentence Transformers
+- **🔗 RAG Framework**: LangChain for advanced document Q&A
+- **🤖 AI & ML**: Google Gemini AI 2.5 Pro, Gemini Embeddings, Sentence Transformers
 - **🗄️ Databases**: Pinecone (Vector), PostgreSQL (Relational)
 - **🌐 Web Framework**: FastAPI, Uvicorn
-- **📄 Document Processing**: PyMuPDF, python-docx
+- **📄 Document Processing**: PyMuPDF, python-docx, OCR support
 - **⚡ Caching**: Redis (optional)
 - **🔧 Infrastructure**: Cloud-deployable, Production-ready
 
 ## ✨ Features
 
-- **Multi-format Document Processing**: PDF, DOCX, EML, TXT, and image files (with OCR)
-- **Gemini Integration**: Advanced query parsing and answer generation using Google Gemini 2.0 Flash
-- **Hybrid Embedding Search**: Combines Gemini embeddings with sentence transformers for optimal results
+### 🔗 LangChain RAG Pipeline
+- **Advanced Retrieval-Augmented Generation**: State-of-the-art document Q&A using LangChain
+- **Intelligent Text Chunking**: Recursive character splitting with optimal overlap
+- **Semantic Search**: Gemini embeddings with Pinecone vector store
+- **Context-Aware Responses**: Structured answers with evidence and conditions
+
+### 📄 Document Processing
+- **Multi-format Support**: PDF, DOCX, EML, TXT, and image files (with OCR)
+- **Smart Text Extraction**: Enhanced PDF processing with OCR fallback
+- **Metadata Preservation**: Document tracking and version management
+
+### 🤖 AI Integration
+- **Google Gemini 2.5 Pro**: Latest LLM for answer generation
+- **Gemini Embeddings**: 768-dimensional semantic embeddings
+- **Retry Logic**: Robust error handling and fallback mechanisms
+- **Custom Prompts**: Insurance and financial document specialized prompts
+
+### 🚀 Advanced Features
 - **Intelligent Caching**: Redis-based caching for improved performance
-- **Document Analytics**: Comprehensive document analysis including readability, complexity, and topic extraction
+- **Document Analytics**: Comprehensive analysis including readability and complexity
 - **Batch Processing**: Process multiple documents concurrently
-- **Real-time Updates**: WebSocket support for live processing updates
+- **Real-time Updates**: WebSocket support for live processing
 - **Document Comparison**: Compare multiple documents across specified aspects
 
 ## 🏗️ Architecture
@@ -45,43 +62,53 @@ The system is modularized into the following components:
 └── requirements.txt        # Dependencies
 ```
 
-## 🚀 Installation
+## 🚀 Quick Start
 
-### 1. Clone the repository
+### Option 1: Automated Setup (Recommended)
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd BAJAJ_FINSERV
+
+# Run the automated setup and start script
+python run_project.py
 ```
 
-### 2. Create virtual environment
+### Option 2: Manual Setup
 ```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd BAJAJ_FINSERV
+
+# 2. Create virtual environment
 python -m venv .venv
 .venv\Scripts\activate  # Windows
 # source .venv/bin/activate  # Linux/Mac
-```
 
-### 3. Install dependencies
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
-```
 
-### 4. Set up environment variables
-```bash
-# Update .env file with your API keys:
-# - GEMINI_API_KEY (Google AI)
-# - PINECONE_API_KEY (Pinecone)
-# - DATABASE_URL (PostgreSQL/Neon)
-```
+# 4. Set up environment variables (copy and edit .env file)
+# Required: GEMINI_API_KEY, PINECONE_API_KEY, PINECONE_INDEX_NAME
+# Optional: DATABASE_URL, REDIS_URL
 
-### 5. Run the application
-```bash
+# 5. Test the integration
+python test_langchain_integration.py
+
+# 6. Run the application
 python main.py
 ```
 
-### 6. Access the API
-- **Server**: http://localhost:3000
-- **API Documentation**: http://localhost:3000/docs
+### 🌐 Access Points
+- **Main API**: http://localhost:3000
+- **Interactive Docs**: http://localhost:3000/docs
 - **Health Check**: http://localhost:3000/health
+
+### 🔧 Key Endpoints
+- **`/ask-document`** - Main LangChain-powered document queries
+- **`/ask-document-langchain`** - Explicit LangChain RAG endpoint
+- **`/analyze-document`** - Document analysis and insights
+- **`/suggest-queries`** - AI-generated query suggestions
 
 
 

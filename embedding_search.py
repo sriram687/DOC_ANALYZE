@@ -47,7 +47,11 @@ class GeminiEmbeddingSearchEngine:
 
         # Gemini embedding configuration
         self.gemini_model_name = "models/text-embedding-004"  # Latest Gemini embedding model
-        self.gemini_dimension = 768  # Gemini embedding dimension
+        self.gemini_dimension = 768 # Gemini embedding dimension
+
+        # Pinecone configuration (use config values)
+        self.pinecone_dimension = config.PINECONE_DIMENSION  # Your index dimension (512)
+        self.pinecone_metric = config.PINECONE_METRIC  # Your index metric (cosine)
 
         # Initialize database manager (lazy initialization)
         self.db_manager = None
@@ -56,25 +60,52 @@ class GeminiEmbeddingSearchEngine:
         # Initialize Pinecone
         self.pc = None
         self.index = None
-        if PINECONE_AVAILABLE and config.PINECONE_API_KEY:
+        self.pinecone_available = False
+
+        if PINECONE_AVAILABLE and config.PINECONE_API_KEY and config.PINECONE_API_KEY != "your_pinecone_api_key_here":
             try:
                 self.pc = Pinecone(api_key=config.PINECONE_API_KEY)
                 self._initialize_pinecone_index()
-                logger.info("Pinecone initialized successfully")
+                if self.index:
+                    self.pinecone_available = True
+                    logger.info("✅ Pinecone initialized successfully")
+                else:
+                    logger.warning("⚠️ Pinecone client created but index connection failed")
             except Exception as e:
-                logger.error(f"Failed to initialize Pinecone: {e}")
+                logger.error(f"❌ Failed to initialize Pinecone: {e}")
+                logger.info("🔄 Continuing without Pinecone - using local embeddings only")
                 self.pc = None
+                self.index = None
+                self.pinecone_available = False
         else:
-            logger.warning("Pinecone not available or API key not set")
+            logger.warning("⚠️ Pinecone not configured - check API key in .env file")
 
         # Fallback to sentence transformers
         if ML_AVAILABLE:
             try:
-                self.sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
-                self.sentence_transformer_dimension = 384
-                logger.info("Sentence transformer loaded as fallback")
+                # Try different models in order of preference, with offline capability
+                models_to_try = [
+                    'all-MiniLM-L6-v2',  # Smaller, more likely to be cached
+                    'paraphrase-MiniLM-L6-v2',  # Alternative small model
+                ]
+
+                self.sentence_transformer = None
+                for model_name in models_to_try:
+                    try:
+                        # Try to load model with offline mode if available
+                        self.sentence_transformer = SentenceTransformer(model_name)
+                        self.sentence_transformer_dimension = self.sentence_transformer.get_sentence_embedding_dimension()
+                        logger.info(f"Sentence transformer loaded: {model_name} (dim: {self.sentence_transformer_dimension})")
+                        break
+                    except Exception as model_error:
+                        logger.warning(f"Could not load {model_name}: {model_error}")
+                        continue
+
+                if self.sentence_transformer is None:
+                    logger.warning("No sentence transformer models could be loaded")
+
             except Exception as e:
-                logger.warning(f"Could not load sentence transformer: {e}")
+                logger.warning(f"Could not initialize sentence transformers: {e}")
                 self.sentence_transformer = None
         else:
             self.sentence_transformer = None
@@ -103,8 +134,8 @@ class GeminiEmbeddingSearchEngine:
                 logger.info(f"Creating Pinecone index: {index_name}")
                 self.pc.create_index(
                     name=index_name,
-                    dimension=self.gemini_dimension,
-                    metric="cosine",
+                    dimension=self.pinecone_dimension,  # Use config dimension (1024)
+                    metric=self.pinecone_metric,  # Use config metric (cosine)
                     spec=ServerlessSpec(
                         cloud="aws",
                         region=config.PINECONE_ENVIRONMENT
@@ -122,20 +153,41 @@ class GeminiEmbeddingSearchEngine:
             logger.error(f"Failed to initialize Pinecone index: {e}")
             self.index = None
 
+    def _pad_embedding_to_dimension(self, embedding: List[float], target_dimension: int) -> List[float]:
+        """Pad or truncate embedding to match target dimension"""
+        if len(embedding) == target_dimension:
+            return embedding
+        elif len(embedding) < target_dimension:
+            # Pad with zeros
+            padding = [0.0] * (target_dimension - len(embedding))
+            return embedding + padding
+        else:
+            # Truncate to target dimension
+            return embedding[:target_dimension]
+
     async def initialize(self):
         """Initialize the search engine and database"""
+        if not hasattr(self, 'db_initialized'):
+            self.db_initialized = False
+
         if not self.db_initialized:
             try:
                 # Lazy initialize database manager
                 if self.db_manager is None:
+                    from database_manager import DatabaseManager
                     self.db_manager = DatabaseManager()
 
                 await self.db_manager.initialize()
                 self.db_initialized = True
                 logger.info("✅ PostgreSQL database initialized successfully")
+            except ImportError as e:
+                logger.warning(f"❌ Database manager not available: {e}")
+                logger.info("🔄 Continuing without database storage")
+                self.db_initialized = False
+                self.db_manager = None
             except Exception as e:
                 logger.warning(f"❌ Database initialization failed: {e}")
-                logger.warning("Continuing without database storage")
+                logger.info("🔄 Continuing without database storage")
                 self.db_initialized = False
                 self.db_manager = None
         
@@ -178,7 +230,10 @@ class GeminiEmbeddingSearchEngine:
                         task_type=task_type
                     )
                 
-                embeddings.append(result['embedding'])
+                # Pad embedding to match Pinecone dimension
+                embedding = result['embedding']
+                padded_embedding = self._pad_embedding_to_dimension(embedding, self.pinecone_dimension)
+                embeddings.append(padded_embedding)
                 self.last_gemini_call = time.time()
                 
                 # Small delay to avoid rate limits
@@ -186,33 +241,29 @@ class GeminiEmbeddingSearchEngine:
                 
             except Exception as e:
                 logger.error(f"Error getting Gemini embedding for text: {str(e)[:100]}... Error: {e}")
-                
+
                 # Fallback to sentence transformer if available
                 if self.sentence_transformer is not None:
                     logger.info("Falling back to sentence transformer for this text")
-                    fallback_embedding = await asyncio.to_thread(
-                        self.sentence_transformer.encode, [text]
-                    )
-                    # Pad or truncate to match Gemini dimension
-                    fallback_embedding = fallback_embedding[0]
-                    if len(fallback_embedding) < self.gemini_dimension:
-                        # Pad with zeros
-                        if ML_AVAILABLE:
-                            padded = np.zeros(self.gemini_dimension)
-                            padded[:len(fallback_embedding)] = fallback_embedding
-                            embeddings.append(padded.tolist())
-                        else:
-                            padded = [0.0] * self.gemini_dimension
-                            padded[:len(fallback_embedding)] = fallback_embedding
-                            embeddings.append(padded)
-                    else:
-                        # Truncate
-                        embeddings.append(fallback_embedding[:self.gemini_dimension].tolist())
+                    try:
+                        fallback_embedding = await asyncio.to_thread(
+                            self.sentence_transformer.encode, [text]
+                        )
+                        # Pad or truncate to match Pinecone dimension
+                        fallback_embedding = fallback_embedding[0].tolist() if hasattr(fallback_embedding[0], 'tolist') else fallback_embedding[0]
+                        padded_embedding = self._pad_embedding_to_dimension(fallback_embedding, self.pinecone_dimension)
+                        embeddings.append(padded_embedding)
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback embedding also failed: {fallback_error}")
+                        # Return zero embedding as last resort
+                        zero_embedding = [0.0] * self.pinecone_dimension
+                        embeddings.append(zero_embedding)
                 else:
                     # Return zero embedding as last resort
-                    embeddings.append([0.0] * self.gemini_dimension)
+                    zero_embedding = [0.0] * self.pinecone_dimension
+                    embeddings.append(zero_embedding)
 
-        return embeddings if not ML_AVAILABLE else np.array(embeddings)
+        return embeddings
     
     async def _get_sentence_transformer_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Get embeddings from sentence transformer"""
@@ -220,7 +271,15 @@ class GeminiEmbeddingSearchEngine:
             raise ValueError("Sentence transformer not available")
 
         embeddings = await asyncio.to_thread(self.sentence_transformer.encode, texts)
-        return embeddings.tolist() if ML_AVAILABLE else embeddings
+        embeddings_list = embeddings.tolist() if hasattr(embeddings, 'tolist') else embeddings
+
+        # Pad all embeddings to match Pinecone dimension
+        padded_embeddings = []
+        for embedding in embeddings_list:
+            padded_embedding = self._pad_embedding_to_dimension(embedding, self.pinecone_dimension)
+            padded_embeddings.append(padded_embedding)
+
+        return padded_embeddings
     
     async def add_document(self, text: str, document_id: str) -> List[DocumentChunk]:
         """Process document and add to Pinecone index and PostgreSQL"""
@@ -247,9 +306,17 @@ class GeminiEmbeddingSearchEngine:
             # Fallback to alternative method
             if self.use_gemini_primary and self.sentence_transformer is not None:
                 logger.info("Falling back to sentence transformer")
-                embeddings = await self._get_sentence_transformer_embeddings(texts)
+                try:
+                    embeddings = await self._get_sentence_transformer_embeddings(texts)
+                except Exception as fallback_error:
+                    logger.error(f"Sentence transformer fallback also failed: {fallback_error}")
+                    # Create dummy embeddings to ensure chunks are still stored
+                    logger.info("Creating dummy embeddings to store chunks locally")
+                    embeddings = [[0.0] * self.pinecone_dimension for _ in texts]
             else:
-                raise e
+                # Create dummy embeddings to ensure chunks are still stored
+                logger.info("No embeddings available - storing chunks with dummy embeddings for local search")
+                embeddings = [[0.0] * self.pinecone_dimension for _ in texts]
 
         # Prepare vectors for Pinecone
         vectors_to_upsert = []
@@ -287,30 +354,58 @@ class GeminiEmbeddingSearchEngine:
                 "embedding_id": vector_id
             })
 
-            # Store embedding in chunk object
+            # Store embedding in chunk object and add to local storage
             chunk.embedding = embedding_list
+            chunk.vector_id = vector_id  # Store the vector ID for reference
             self.chunks.append(chunk)
 
-        # Upsert vectors to Pinecone
-        if self.index and vectors_to_upsert:
-            try:
-                self.index.upsert(vectors=vectors_to_upsert)
-                logger.info(f"Upserted {len(vectors_to_upsert)} vectors to Pinecone")
-            except Exception as e:
-                logger.error(f"Failed to upsert vectors to Pinecone: {e}")
+            # Ensure chunk has document_id for local search
+            if not hasattr(chunk, 'document_id'):
+                chunk.document_id = document_id
 
-        # Store chunks in PostgreSQL (optional)
-        if self.db_initialized and self.db_manager:
+        # Upsert vectors to Pinecone (if available)
+        if self.index and self.pinecone_available and vectors_to_upsert:
             try:
-                await self.db_manager.store_document_chunks(document_id, chunk_data_for_db)
-                logger.info(f"✅ Stored {len(chunk_data_for_db)} chunks in PostgreSQL")
+                logger.info(f"📤 Upserting {len(vectors_to_upsert)} vectors to Pinecone...")
+                self.index.upsert(vectors=vectors_to_upsert)
+                logger.info(f"✅ Successfully upserted {len(vectors_to_upsert)} vectors to Pinecone")
+
+                # Verify the upsert worked
+                stats = self.index.describe_index_stats()
+                logger.info(f"📊 Pinecone index now has {stats.total_vector_count} total vectors")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to upsert vectors to Pinecone: {e}")
+                import traceback
+                traceback.print_exc()
+        elif vectors_to_upsert:
+            logger.info(f"📝 Stored {len(vectors_to_upsert)} vectors locally (Pinecone not available)")
+        else:
+            logger.warning("⚠️ No vectors to upsert!")
+
+        # Store chunks in PostgreSQL (optional) with improved error handling
+        if hasattr(self, 'db_initialized') and self.db_initialized and self.db_manager:
+            try:
+                stored_ids = await self.db_manager.store_document_chunks(document_id, chunk_data_for_db)
+                if stored_ids:
+                    logger.info(f"✅ Stored {len(stored_ids)} chunks in PostgreSQL")
+                else:
+                    logger.warning("⚠️ No chunks were stored in PostgreSQL")
             except Exception as e:
                 logger.warning(f"❌ Failed to store chunks in PostgreSQL: {e}")
+                # Continue without database storage - Pinecone is still available
         else:
-            logger.info("📝 Database not available, storing only in Pinecone")
+            logger.info("📝 Database not available, using Pinecone + local storage only")
 
         processing_time = time.time() - start_time
-        logger.info(f"Added {len(chunks)} chunks with embeddings in {processing_time:.2f}s")
+        logger.info(f"✅ Added {len(chunks)} chunks with embeddings in {processing_time:.2f}s")
+        logger.info(f"📊 Total chunks in memory: {len(self.chunks)}")
+
+        # Log storage status
+        if self.pinecone_available:
+            logger.info(f"📝 Database not available, storing only in Pinecone")
+        else:
+            logger.info(f"📝 Database not available, stored locally for text search")
 
         return chunks
     
@@ -319,9 +414,12 @@ class GeminiEmbeddingSearchEngine:
         if k is None:
             k = config.TOP_K_CHUNKS
 
-        if not self.index:
-            logger.warning("Pinecone index not available")
-            return []
+        if not self.index or not self.pinecone_available:
+            logger.warning("⚠️ Pinecone not available - using local similarity search")
+            logger.info(f"   Index available: {self.index is not None}")
+            logger.info(f"   Pinecone available: {self.pinecone_available}")
+            logger.info(f"   Total local chunks: {len(self.chunks)}")
+            return await self._local_similarity_search(query, k, document_id)
 
         start_time = time.time()
 
@@ -345,44 +443,76 @@ class GeminiEmbeddingSearchEngine:
         else:
             query_vector = query_embeddings[0].tolist()
 
-        # Prepare query filter
-        query_filter = {}
+        # Prepare query filter for Pinecone
+        query_filter = None
         if document_id:
-            query_filter["document_id"] = document_id
+            query_filter = {"document_id": {"$eq": document_id}}
+            logger.info(f"🔍 Filtering by document_id: {document_id}")
 
         # Search in Pinecone
         try:
+            logger.info(f"🔍 Searching Pinecone with query vector (dim: {len(query_vector)})")
+
             search_results = self.index.query(
                 vector=query_vector,
                 top_k=k,
                 include_metadata=True,
-                filter=query_filter if query_filter else None
+                filter=query_filter
             )
+
+            logger.info(f"📊 Pinecone returned {len(search_results.matches)} matches")
 
             # Convert Pinecone results to DocumentChunk objects
             results = []
-            for match in search_results.matches:
-                if match.score > config.CONFIDENCE_THRESHOLD:
+            # Use a lower threshold for cosine similarity (0.3 instead of 0.7)
+            min_threshold = 0.3
+
+            for i, match in enumerate(search_results.matches):
+                logger.info(f"   Match {i+1}: Score={match.score:.3f}, ID={match.id}")
+
+                if match.score > min_threshold:
                     # Create DocumentChunk from Pinecone metadata
                     chunk = DocumentChunk(
                         id=match.metadata.get("chunk_id", match.id),
-                        document_id=match.metadata.get("document_id", ""),
                         text=match.metadata.get("text", ""),
                         metadata={
                             **match.metadata,
                             "similarity_score": float(match.score),
                             "pinecone_id": match.id
-                        }
+                        },
+                        document_id=match.metadata.get("document_id", "")
                     )
                     results.append(chunk)
+                    logger.info(f"   ✅ Added chunk: {chunk.text[:100]}...")
+                else:
+                    logger.info(f"   ❌ Score {match.score:.3f} below threshold {min_threshold}")
 
             search_time = time.time() - start_time
-            logger.info(f"Found {len(results)} relevant chunks in Pinecone in {search_time:.2f}s")
+            logger.info(f"✅ Found {len(results)} relevant chunks in Pinecone in {search_time:.2f}s")
+
+            # If no results with high threshold, try with very low threshold
+            if len(results) == 0 and len(search_results.matches) > 0:
+                logger.warning("🔄 No results with normal threshold, trying with lower threshold...")
+                for match in search_results.matches[:3]:  # Take top 3 regardless of score
+                    chunk = DocumentChunk(
+                        id=match.metadata.get("chunk_id", match.id),
+                        text=match.metadata.get("text", ""),
+                        metadata={
+                            **match.metadata,
+                            "similarity_score": float(match.score),
+                            "pinecone_id": match.id
+                        },
+                        document_id=match.metadata.get("document_id", "")
+                    )
+                    results.append(chunk)
+                logger.info(f"📝 Added {len(results)} chunks with relaxed threshold")
 
             return results
 
         except Exception as e:
-            logger.error(f"Error searching in Pinecone: {e}")
+            logger.error(f"❌ Error searching in Pinecone: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def chunk_document(self, text: str, document_id: str) -> List[DocumentChunk]:
@@ -463,19 +593,19 @@ class GeminiEmbeddingSearchEngine:
 
         return clean_sentences
     
-    async def hybrid_search(self, query: str, k: int = None) -> List[Dict[str, Any]]:
+    async def hybrid_search(self, query: str, k: int = None, document_id: str = None) -> List[Dict[str, Any]]:
         """
         Perform hybrid search using both Gemini and sentence transformer embeddings
         Then combine and rank results
         """
         if k is None:
             k = config.TOP_K_CHUNKS
-            
+
         results = []
-        
+
         # Search with Gemini embeddings
         try:
-            gemini_results = await self.search_similar_chunks(query, k)
+            gemini_results = await self.search_similar_chunks(query, k, document_id)
             for chunk in gemini_results:
                 results.append({
                     'chunk': chunk,
@@ -529,3 +659,78 @@ class GeminiEmbeddingSearchEngine:
         
         # Return top k results
         return results[:k]
+
+    async def _local_similarity_search(self, query: str, k: int, document_id: str = None) -> List[DocumentChunk]:
+        """Fallback local similarity search when Pinecone is not available"""
+        try:
+            logger.info(f"🔍 Starting local search for query: '{query}' (total chunks: {len(self.chunks)})")
+
+            # Simple text-based similarity using keyword matching
+            query_words = set(query.lower().split())
+
+            # Filter chunks by document_id if specified
+            chunks_to_search = self.chunks
+            if document_id:
+                chunks_to_search = [chunk for chunk in self.chunks if hasattr(chunk, 'document_id') and chunk.document_id == document_id]
+                logger.info(f"🔍 Filtered to {len(chunks_to_search)} chunks for document_id: {document_id}")
+
+            if not chunks_to_search:
+                logger.warning(f"❌ No chunks found for search (document_id: {document_id})")
+                # If no chunks for specific document, try all chunks
+                if document_id:
+                    logger.info("🔄 Trying search across all chunks...")
+                    chunks_to_search = self.chunks
+
+                if not chunks_to_search:
+                    logger.warning("❌ No chunks available at all")
+                    logger.info("💡 This might mean:")
+                    logger.info("   1. Document wasn't processed properly")
+                    logger.info("   2. Chunks weren't stored")
+                    logger.info("   3. Pinecone connection failed during storage")
+                    return []
+
+            # Calculate simple similarity scores
+            scored_chunks = []
+            for chunk in chunks_to_search:
+                chunk_words = set(chunk.text.lower().split())
+
+                # Multiple similarity metrics
+                # 1. Jaccard similarity
+                intersection = len(query_words.intersection(chunk_words))
+                union = len(query_words.union(chunk_words))
+                jaccard_sim = intersection / union if union > 0 else 0
+
+                # 2. Simple word overlap score
+                overlap_score = intersection / len(query_words) if len(query_words) > 0 else 0
+
+                # 3. Check for exact phrase matches
+                phrase_bonus = 0
+                if len(query.strip()) > 3 and query.lower() in chunk.text.lower():
+                    phrase_bonus = 0.5
+
+                # Combined similarity score
+                similarity = (jaccard_sim * 0.4) + (overlap_score * 0.4) + phrase_bonus
+
+                if similarity > 0.01:  # Lower threshold to include more results
+                    scored_chunks.append((chunk, similarity))
+
+            # Sort by similarity score
+            scored_chunks.sort(key=lambda x: x[1], reverse=True)
+
+            # Return top k chunks
+            result_chunks = [chunk for chunk, _ in scored_chunks[:k]]
+
+            logger.info(f"✅ Local search found {len(result_chunks)} relevant chunks out of {len(scored_chunks)} candidates")
+
+            # Log some debug info about the best matches
+            if scored_chunks:
+                best_score = scored_chunks[0][1]
+                logger.info(f"📊 Best match score: {best_score:.3f}")
+
+            return result_chunks
+
+        except Exception as e:
+            logger.error(f"❌ Error in local similarity search: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
