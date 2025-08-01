@@ -1003,15 +1003,19 @@ if __name__ == "__main__":
         print("Get your API key from: https://makersuite.google.com/app/apikey")
         print("Starting server anyway...")
 
+    # Get port from environment (for Render deployment) or default to 3000
+    port = int(os.getenv("PORT", 3000))
+    host = "0.0.0.0" if os.getenv("RENDER") else "127.0.0.1"
+
     print("🚀 Starting Enhanced Document Query API...")
-    print("📚 Access API documentation at: http://localhost:3000/docs")
+    print(f"📚 Access API documentation at: http://{host}:{port}/docs")
     print("🔗 Pinecone vector database: Connected")
     print("🐘 PostgreSQL database: Attempting connection...")
 
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",
-        port=3000,
+        host=host,
+        port=port,
         reload=False,
         log_level="info"
     )

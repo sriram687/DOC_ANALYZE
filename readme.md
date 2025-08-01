@@ -64,21 +64,11 @@ The system is modularized into the following components:
 
 ## 🚀 Quick Start
 
-### Option 1: Automated Setup (Recommended)
-```bash
-# Clone the repository
-git clone <repository-url>
-cd BAJAJ_FINSERV
-
-# Run the automated setup and start script
-python run_project.py
-```
-
-### Option 2: Manual Setup
+### Local Development
 ```bash
 # 1. Clone the repository
-git clone <repository-url>
-cd BAJAJ_FINSERV
+git clone https://github.com/sriram687/DOC_ANALYZE.git
+cd DOC_ANALYZE
 
 # 2. Create virtual environment
 python -m venv .venv
@@ -86,29 +76,45 @@ python -m venv .venv
 # source .venv/bin/activate  # Linux/Mac
 
 # 3. Install dependencies
-pip install -r requirements.txt
+pip install -r requirements_render.txt
 
-# 4. Set up environment variables (copy and edit .env file)
-# Required: GEMINI_API_KEY, PINECONE_API_KEY, PINECONE_INDEX_NAME
-# Optional: DATABASE_URL, REDIS_URL
+# 4. Set up environment variables
+# Create .env file with:
+GEMINI_API_KEY=your_gemini_api_key
+PINECONE_API_KEY=your_pinecone_api_key
+PINECONE_INDEX_NAME=your_index_name
 
-# 5. Test the integration
-python test_langchain_integration.py
-
-# 6. Run the application
+# 5. Run the application
 python main.py
 ```
 
+### 🌐 Deploy on Render
+```bash
+# 1. Push to GitHub
+git add .
+git commit -m "Deploy to Render"
+git push origin main
+
+# 2. Connect to Render
+# - Go to render.com
+# - Connect GitHub repository
+# - Set environment variables
+# - Deploy!
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+
 ### 🌐 Access Points
-- **Main API**: http://localhost:3000
-- **Interactive Docs**: http://localhost:3000/docs
-- **Health Check**: http://localhost:3000/health
+- **Local**: http://localhost:3000
+- **Production**: https://your-service.onrender.com
+- **API Docs**: `/docs`
+- **Health Check**: `/health`
 
 ### 🔧 Key Endpoints
-- **`/ask-document`** - Main LangChain-powered document queries
-- **`/ask-document-langchain`** - Explicit LangChain RAG endpoint
-- **`/analyze-document`** - Document analysis and insights
-- **`/suggest-queries`** - AI-generated query suggestions
+- **`POST /ask-document`** - Main document query endpoint
+- **`POST /ask-document-clean`** - Clean formatted responses
+- **`GET /health`** - Health check
+- **`GET /docs`** - Interactive API documentation
 
 
 
