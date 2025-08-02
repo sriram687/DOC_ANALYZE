@@ -1,400 +1,210 @@
-# 🚀 Enhanced Document Query API with LangChain
+# 🚀 AI-Powered Document Analyzer - Full-Stack Application
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![React 18](https://img.shields.io/badge/React-18+-blue.svg)](https://reactjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-green.svg)](https://fastapi.tiangolo.com/)
-[![LangChain](https://img.shields.io/badge/LangChain-0.1+-orange.svg)](https://langchain.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![LangChain](https://img.shields.io/badge/LangChain-0.3+-orange.svg)](https://langchain.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5+-blue.svg)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3+-blue.svg)](https://tailwindcss.com/)
 
-A sophisticated AI-powered document analysis system that leverages **LangChain RAG (Retrieval-Augmented Generation)**, **Google Gemini AI**, **Pinecone vector database**, and **PostgreSQL** for intelligent document processing, semantic search, and real-time querying with advanced caching and analytics.
+A complete full-stack AI document analysis platform with modern React frontend and powerful FastAPI backend. Upload documents, ask questions in natural language, and get instant AI-powered answers using advanced LangChain RAG pipeline.
 
-## 🏗️ Technology Stack
+## 🌟 **Live Demo**
 
-- **🔗 RAG Framework**: LangChain for advanced document Q&A
-- **🤖 AI & ML**: Google Gemini AI 2.5 Pro, Gemini Embeddings, Sentence Transformers
-- **🗄️ Databases**: Pinecone (Vector), PostgreSQL (Relational)
-- **🌐 Web Framework**: FastAPI, Uvicorn
-- **📄 Document Processing**: PyMuPDF, python-docx, OCR support
-- **⚡ Caching**: Redis (optional)
-- **🔧 Infrastructure**: Cloud-deployable, Production-ready
+- **🎨 Frontend**: [Deploy on Vercel](https://vercel.com/new/clone?repository-url=https://github.com/sriram687/DOC_ANALYZE)
+- **⚡ Backend API**: [Deploy on Render](https://render.com/deploy?repo=https://github.com/sriram687/DOC_ANALYZE)
+- **📚 API Docs**: Interactive documentation available after deployment
 
-## ✨ Features
+## ✨ **Features**
 
-### 🔗 LangChain RAG Pipeline
-- **Advanced Retrieval-Augmented Generation**: State-of-the-art document Q&A using LangChain
-- **Intelligent Text Chunking**: Recursive character splitting with optimal overlap
-- **Semantic Search**: Gemini embeddings with Pinecone vector store
-- **Context-Aware Responses**: Structured answers with evidence and conditions
+### 🎨 **Modern Frontend (React + TypeScript)**
+- **Beautiful UI** with Tailwind CSS and Lucide icons
+- **Drag & Drop Upload** with file validation and preview
+- **Real-time Processing** with animated loading states
+- **Voice Input Support** for natural language queries
+- **Professional Results** with copy/download functionality
+- **Mobile Responsive** design for all devices
 
-### 📄 Document Processing
-- **Multi-format Support**: PDF, DOCX, EML, TXT, and image files (with OCR)
-- **Smart Text Extraction**: Enhanced PDF processing with OCR fallback
-- **Metadata Preservation**: Document tracking and version management
+### ⚡ **Powerful Backend (FastAPI + LangChain)**
+- **LangChain RAG Pipeline** for advanced document analysis
+- **Multi-format Support** (PDF, DOCX, images with OCR)
+- **Gemini 2.5 Pro Integration** for AI responses
+- **Pinecone Vector Store** for semantic search
+- **Clean Response Format** optimized for users
+- **Production Ready** with comprehensive error handling
 
-### 🤖 AI Integration
-- **Google Gemini 2.5 Pro**: Latest LLM for answer generation
-- **Gemini Embeddings**: 768-dimensional semantic embeddings
-- **Retry Logic**: Robust error handling and fallback mechanisms
-- **Custom Prompts**: Insurance and financial document specialized prompts
+### 🤖 **AI Capabilities**
+- **Natural Language Processing** - Ask questions in plain English
+- **Document Understanding** - Extracts meaning from complex documents
+- **Contextual Answers** - Provides relevant, accurate responses
+- **Confidence Scoring** - Shows reliability of answers
+- **Multi-language Support** - Works with various languages
 
-### 🚀 Advanced Features
-- **Intelligent Caching**: Redis-based caching for improved performance
-- **Document Analytics**: Comprehensive analysis including readability and complexity
-- **Batch Processing**: Process multiple documents concurrently
-- **Real-time Updates**: WebSocket support for live processing
-- **Document Comparison**: Compare multiple documents across specified aspects
-
-## 🏗️ Architecture
-
-The system is modularized into the following components:
+## 🏗️ **Architecture**
 
 ```
-├── config.py              # Configuration management
-├── models.py               # Pydantic data models
-├── cache_manager.py        # Redis caching system
-├── document_processor.py   # Document text extraction
-├── query_optimizer.py      # Query optimization and intent classification
-├── document_analytics.py   # Document analysis and insights
-├── gemini_parser.py        # Gemini API integration
-├── embedding_search.py     # Enhanced embedding search engine
-├── batch_processor.py      # Batch and streaming processing
-├── api_handler.py          # Main API orchestration
-├── main.py                 # FastAPI application
-└── requirements.txt        # Dependencies
+┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│   React Frontend    │    │   FastAPI Backend   │    │   AI Services       │
+│   (Vercel)          │◄──►│   (Render)          │◄──►│   (Gemini/Pinecone) │
+│                     │    │                     │    │                     │
+│ • Modern UI/UX      │    │ • Document Process  │    │ • Vector Search     │
+│ • File Upload       │    │ • LangChain RAG     │    │ • AI Generation     │
+│ • Real-time Results │    │ • Clean Responses   │    │ • Embeddings        │
+│ • Mobile Responsive │    │ • Production Ready  │    │ • Semantic Search   │
+└─────────────────────┘    └─────────────────────┘    └─────────────────────┘
 ```
 
-## 🚀 Quick Start
+## 📁 **Project Structure**
 
-### Local Development
+```
+DOC_ANALYZE/
+├── 🔧 backend/                       # FastAPI + LangChain
+│   ├── main.py                       # Application entry point
+│   ├── src/
+│   │   ├── models/                   # Data models
+│   │   └── services/                 # Business logic
+│   ├── config/                       # Configuration
+│   └── requirements.txt              # Dependencies
+│
+├── 🎨 frontend/                      # React + TypeScript
+│   ├── src/
+│   │   ├── components/               # React components
+│   │   ├── services/                 # API integration
+│   │   └── types/                    # TypeScript types
+│   └── package.json                  # Dependencies
+│
+├── 📖 docs/                          # Documentation
+├── 🗂️ legacy/                       # Archived code
+└── 📄 README.md                     # This file
+```
+
+See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed organization.
+
+## 🚀 **Quick Start**
+
+### **Option 1: Run Locally (5 minutes)**
+
 ```bash
 # 1. Clone the repository
 git clone https://github.com/sriram687/DOC_ANALYZE.git
 cd DOC_ANALYZE
 
-# 2. Create virtual environment
+# 2. Set up environment variables
+cp .env.example .env
+# Edit .env with your API keys
+
+# 3. Start Backend (Terminal 1)
+cd backend
 python -m venv .venv
-.venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # Linux/Mac
-
-# 3. Install dependencies
-pip install -r requirements_render.txt
-
-# 4. Set up environment variables
-# Create .env file with:
-GEMINI_API_KEY=your_gemini_api_key
-PINECONE_API_KEY=your_pinecone_api_key
-PINECONE_INDEX_NAME=your_index_name
-
-# 5. Run the application
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
 python main.py
+
+# 4. Start Frontend (Terminal 2)
+cd frontend
+npm install
+npm start
+
+# 5. Open your browser
+# Frontend: http://localhost:3000
+# Backend API: http://127.0.0.1:3000/docs
 ```
 
-### 🌐 Deploy on Render
-```bash
-# 1. Push to GitHub
-git add .
-git commit -m "Deploy to Render"
-git push origin main
+### **Option 2: Deploy to Production (10 minutes)**
 
-# 2. Connect to Render
-# - Go to render.com
-# - Connect GitHub repository
-# - Set environment variables
-# - Deploy!
-```
+1. **Deploy Backend to Render**:
+   - Connect GitHub repository
+   - Set environment variables (API keys)
+   - Deploy automatically
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+2. **Deploy Frontend to Vercel**:
+   - Import GitHub repository
+   - Set `REACT_APP_API_URL` environment variable
+   - Deploy with one click
 
-### 🌐 Access Points
-- **Local**: http://localhost:3000
-- **Production**: https://your-service.onrender.com
-- **API Docs**: `/docs`
-- **Health Check**: `/health`
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed instructions.
 
-### 🔧 Key Endpoints
-- **`POST /ask-document`** - Main document query endpoint
-- **`POST /ask-document-clean`** - Clean formatted responses
-- **`GET /health`** - Health check
-- **`GET /docs`** - Interactive API documentation
+## 🔑 **Required API Keys**
 
+### **Gemini API Key**
+1. Visit: https://makersuite.google.com/app/apikey
+2. Create API key
+3. Copy key (starts with `AIza...`)
 
+### **Pinecone Setup**
+1. Visit: https://app.pinecone.io/
+2. Create account and new index:
+   - **Name**: `doc-analyze`
+   - **Dimension**: `768`
+   - **Metric**: `cosine`
+3. Copy API key from Settings
 
-### 4. Install optional dependencies
+## 🎯 **Use Cases**
 
-**For OCR support:**
-```bash
-# Install Tesseract OCR
-# Ubuntu/Debian:
-sudo apt-get install tesseract-ocr
+- **📄 Document Analysis** - Extract insights from PDFs, contracts, reports
+- **🏥 Insurance Claims** - Analyze policy documents and coverage details
+- **📋 Legal Documents** - Review contracts, agreements, and legal texts
+- **📊 Research Papers** - Summarize and query academic documents
+- **📝 Business Reports** - Extract key information from business documents
+- **🎓 Educational Content** - Analyze textbooks, study materials
 
-# macOS:
-brew install tesseract
+## 🛠️ **Tech Stack**
 
-# Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki
-```
+### **Frontend**
+- **React 18** with TypeScript for type safety
+- **Tailwind CSS** for modern, responsive styling
+- **Lucide React** for beautiful icons
+- **Axios** for API communication
+- **React Dropzone** for file uploads
 
-**For Redis caching:**
-```bash
-# Install Redis server
-# Ubuntu/Debian:
-sudo apt-get install redis-server
+### **Backend**
+- **FastAPI** for high-performance API
+- **LangChain** for RAG pipeline
+- **Google Gemini 2.5 Pro** for AI responses
+- **Pinecone** for vector storage
+- **Python 3.13** compatible
 
-# macOS:
-brew install redis
+### **Deployment**
+- **Frontend**: Vercel (automatic deployments)
+- **Backend**: Render (containerized deployment)
+- **Database**: Pinecone (managed vector database)
 
-# Windows: Use Docker or WSL
-```
+## 📊 **Performance**
 
-## ⚙️ Configuration
+- **⚡ Fast Response Times**: 5-15 seconds for document analysis
+- **📱 Mobile Optimized**: Perfect performance on all devices
+- **🔄 Real-time Updates**: Live progress indicators
+- **📈 Scalable**: Handles multiple concurrent users
+- **🛡️ Reliable**: Production-grade error handling
 
-### Required Environment Variables
-- `GEMINI_API_KEY`: Your Google AI API key (required)
-- `GOOGLE_CLOUD_PROJECT`: Your Google Cloud project ID (optional)
+## 📖 **Documentation**
 
-### Optional Configuration
-- `REDIS_URL`: Redis connection URL for caching
-- `USE_GEMINI_EMBEDDINGS`: Enable Gemini embeddings (default: true)
-- `ENABLE_HYBRID_SEARCH`: Enable hybrid search combining multiple models
-- `MAX_FILE_SIZE`: Maximum file size in bytes (default: 50MB)
-- `CHUNK_SIZE`: Text chunk size for processing (default: 1000)
+- **[Quick Deploy Guide](docs/QUICK_DEPLOY.md)** - 10-minute setup
+- **[Full Deployment Guide](docs/DEPLOYMENT.md)** - Complete instructions
+- **[Project Structure](PROJECT_STRUCTURE.md)** - Folder organization
+- **[Frontend Setup](docs/FRONTEND_SETUP.md)** - React app details
 
-## 🔧 Usage
+## 🤝 **Contributing**
 
-### Starting the API
-```bash
-python main.py
-```
-The API will be available at `http://localhost:8000`
-
-### API Documentation
-Interactive API documentation is available at:
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
-
-## 📚 Key Endpoints
-
-### 1. Basic Document Query
-```bash
-curl -X POST "http://localhost:8000/ask-document" \
-     -F "query=What does this policy cover?" \
-     -F "file=@document.pdf"
-```
-
-### 2. Gemini Enhanced Query (with hybrid search)
-```bash
-curl -X POST "http://localhost:8000/ask-document-gemini" \
-     -F "query=What are the eligibility requirements?" \
-     -F "file=@document.pdf"
-```
-
-### 3. Document Analysis
-```bash
-curl -X POST "http://localhost:8000/analyze-document" \
-     -F "file=@document.pdf"
-```
-
-### 4. Query Suggestions
-```bash
-curl -X POST "http://localhost:8000/suggest-queries" \
-     -F "file=@document.pdf" \
-     -F "num_suggestions=5"
-```
-
-### 5. Document Comparison
-```bash
-curl -X POST "http://localhost:8000/compare-documents" \
-     -F "files=@doc1.pdf" \
-     -F "files=@doc2.pdf" \
-     -F "comparison_aspects=coverage" \
-     -F "comparison_aspects=conditions"
-```
-
-## 📋 Response Format
-
-### Query Response
-```json
-{
-  "query": "What does this policy cover?",
-  "answer": "This policy covers...",
-  "conditions": ["Must be enrolled", "Valid ID required"],
-  "evidence": [
-    {
-      "clause_id": "section_1",
-      "text": "Relevant text from document",
-      "relevance": "Why this clause is relevant"
-    }
-  ],
-  "confidence": 0.85,
-  "processing_time": 2.34
-}
-```
-
-### Document Analysis Response
-```json
-{
-  "word_count": 1500,
-  "sentence_count": 75,
-  "avg_sentence_length": 20.0,
-  "readability_score": 45.2,
-  "document_type": "insurance_policy",
-  "key_topics": ["coverage", "benefits", "claims"],
-  "complexity_score": 65.8,
-  "chunk_count": 12,
-  "avg_chunk_length": 125.0,
-  "processing_timestamp": "2024-01-15T10:30:00Z",
-  "document_id": "doc_123"
-}
-```
-
-## 🚀 Advanced Features
-
-### Caching
-The system supports Redis-based caching for:
-- Document embeddings (1 hour TTL)
-- Query responses (30 minutes TTL)
-
-Enable caching by setting up Redis and configuring `REDIS_URL`.
-
-### Hybrid Search
-Combines Gemini embeddings with sentence transformers for optimal search results:
-- **Primary**: Gemini embeddings (768 dimensions)
-- **Fallback**: Sentence transformers (384 dimensions)
-- **Weighted scoring**: 70% Gemini + 30% Sentence transformer
-
-### Batch Processing
-Process multiple documents concurrently:
-```bash
-curl -X POST "http://localhost:8000/batch-process" \
-     -F "queries=Query 1" \
-     -F "queries=Query 2" \
-     -F "files=@doc1.pdf" \
-     -F "files=@doc2.pdf"
-```
-
-### WebSocket Support
-Real-time processing updates via WebSocket:
-```javascript
-const ws = new WebSocket('ws://localhost:8000/ws/process-document');
-ws.send(JSON.stringify({query: 'What does this cover?'}));
-```
-
-## ⚡ Performance Optimization
-
-### Embedding Caching
-- Document embeddings are cached to avoid recomputation
-- Query embeddings use rate limiting for Gemini API
-
-### Concurrent Processing
-- Configurable concurrency limits for batch processing
-- Async processing throughout the system
-
-### Memory Management
-- Streaming document processing for large files
-- Efficient FAISS indexing for similarity search
-
-## 🛠️ Error Handling
-
-The system includes comprehensive error handling:
-- Graceful fallback from Gemini to sentence transformers
-- File format validation and size limits
-- API rate limiting compliance
-- Detailed error messages and logging
-
-## 👩‍💻 Development
-
-### Running Tests
-```bash
-pytest tests/
-```
-
-### Code Structure
-Each module has a specific responsibility:
-- `config.py`: Centralized configuration
-- `models.py`: Type-safe data models
-- `document_processor.py`: File processing and OCR
-- `gemini_parser.py`: AI model interactions
-- `embedding_search.py`: Advanced search capabilities
-
-### Adding New Features
-1. Add configuration to `config.py`
-2. Define models in `models.py`
-3. Implement logic in appropriate module
-4. Add endpoint to `main.py`
-5. Update documentation
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### Gemini API Errors
-- Verify API key is correct
-- Check rate limits and quotas
-- Ensure model names are up to date
-
-#### OCR Not Working
-- Install Tesseract OCR system package
-- Verify pytesseract can find Tesseract executable
-- Check image quality and format
-
-#### Redis Connection Issues
-- Verify Redis server is running
-- Check Redis URL configuration
-- System will work without Redis (caching disabled)
-
-#### Memory Issues
-- Reduce `CHUNK_SIZE` for large documents
-- Lower `MAX_CONCURRENT_BATCH` for batch processing
-- Monitor system resources
-
-### Logging
-Set log level in environment:
-```bash
-export LOG_LEVEL=DEBUG
-```
-
-Logs include:
-- Processing times
-- Cache hit/miss rates
-- Error details and stack traces
-- Performance metrics
-
-## 📊 Project Status
-
-![GitHub last commit](https://img.shields.io/github/last-commit/username/enhanced-document-query-api)
-![GitHub issues](https://img.shields.io/github/issues/username/enhanced-document-query-api)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/username/enhanced-document-query-api)
-![GitHub stars](https://img.shields.io/github/stars/username/enhanced-document-query-api)
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Quick Contribution Steps
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📄 License
+## 📄 **License**
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 📚 Documentation
+## 🙏 **Acknowledgments**
 
-- **[API Documentation](http://localhost:3000/docs)** - Interactive API docs
-- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
-- **[Changelog](CHANGELOG.md)** - Version history
-- **[License](LICENSE)** - MIT License
-
-## 🙏 Acknowledgments
-
-- **Google AI** for the Gemini API
-- **Pinecone** for vector database services
-- **FastAPI** for the excellent web framework
-- **The open-source community** for amazing tools and libraries
+- **LangChain** for the powerful RAG framework
+- **Google Gemini** for advanced AI capabilities
+- **Pinecone** for vector database infrastructure
+- **Vercel & Render** for seamless deployment platforms
 
 ---
 
-**⭐ Star this repository if you find it helpful!**
+**🌟 Star this repository if you find it helpful!**
 
-**Built with ❤️ using Google Gemini AI, Pinecone, and PostgreSQL**
+**Built with ❤️ using React, FastAPI, LangChain, and AI**
