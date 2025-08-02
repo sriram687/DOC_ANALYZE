@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Zap, Shield, Globe, Github, ExternalLink } from 'lucide-react';
-import FileUpload from './components/FileUpload';
-import QueryInput from './components/QueryInput';
-import ResultsDisplay from './components/ResultsDisplay';
-import LoadingSpinner from './components/LoadingSpinner';
-import { apiService } from './services/api';
-import { QueryResponse, CleanQueryResponse, LoadingState } from './types';
+import FileUpload from './components/FileUpload.tsx';
+import QueryInput from './components/QueryInput.tsx';
+import ResultsDisplay from './components/ResultsDisplay.tsx';
+import LoadingSpinner from './components/LoadingSpinner.tsx';
+import { apiService } from './services/api.ts';
+import { QueryResponse, CleanQueryResponse, LoadingState } from './types/index.ts';
 import './App.css';
 
 function App() {
