@@ -21,7 +21,7 @@ try:
 except ImportError:
     OCR_AVAILABLE = False
 
-from config import config
+from config.config import config
 
 logger = logging.getLogger(__name__)
 

@@ -24,8 +24,8 @@ from langchain_core.output_parsers import StrOutputParser
 from pinecone import Pinecone
 
 # Local imports
-from config import config
-from models import QueryResponse, DocumentChunk
+from config.config import config
+from src.models import QueryResponse, DocumentChunk
 
 logger = logging.getLogger(__name__)
 
