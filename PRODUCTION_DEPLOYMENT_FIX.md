@@ -93,3 +93,16 @@ DATABASE_URL=your_database_url
 2. Set proper environment variables
 3. Test the production deployment
 4. Monitor for any additional issues
+
+## 🚨 Immediate Fix for Current Issue
+
+Based on the screenshot, your frontend is trying to connect to `https://your-backend-url.onrender.com`.
+
+**Quick Fix:**
+1. Go to your Vercel dashboard
+2. Navigate to your project settings
+3. Go to Environment Variables
+4. Add/Update: `REACT_APP_API_URL` = `https://doc-analyze-api.onrender.com`
+5. Redeploy your frontend
+
+This will fix the immediate connection issue.
