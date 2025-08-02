@@ -203,8 +203,8 @@ if __name__ == "__main__":
     if not api_key or api_key == "your_gemini_api_key_here":
         print("Warning: GEMINI_API_KEY not set or using placeholder value")
 
-    # Get port from environment (for Render deployment) or default to 3000
-    port = int(os.getenv("PORT", 3000))
+    # Get port from environment (for Render deployment) or default to 8000
+    port = int(os.getenv("PORT", 8000))
     host = "0.0.0.0" if os.getenv("RENDER") else "127.0.0.1"
 
     print("🚀 Starting Enhanced Document Query API...")
