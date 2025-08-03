@@ -4,7 +4,9 @@ Clean, production-ready FastAPI application with LangChain RAG pipeline
 """
 
 import asyncio
+import json
 import logging
+import re
 import time
 import uuid
 import hashlib
@@ -138,6 +140,108 @@ app.add_middleware(
 )
 
 # =============================================================================
+# Document Analysis Functions
+# =============================================================================
+
+async def process_document_questions(content: str, questions: list) -> list:
+    """
+    Process document content and questions using LangChain + Gemini
+    Returns a list of 10 answers extracted from the document
+    """
+    try:
+        logger.info("🧠 Starting document analysis with Gemini")
+
+        # Create a concise prompt for the LLM
+        questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)])
+
+        prompt = f"""Extract answers from this document for 10 questions. Return ONLY a JSON object.
+
+DOCUMENT:
+{content}
+
+QUESTIONS:
+{questions_text}
+
+Return exactly this JSON format:
+{{"answers": ["answer1", "answer2", "answer3", "answer4", "answer5", "answer6", "answer7", "answer8", "answer9", "answer10"]}}
+
+Extract exact text from document. If not found, use "Information not available"."""
+
+        # Use direct Google Generative AI client for better control
+        import google.generativeai as genai
+        from config.config import config
+
+        # Configure and create direct Gemini client
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        # Use Gemini 1.5 Pro for more predictable token usage
+        model = genai.GenerativeModel("gemini-1.5-pro")
+
+        # Generate response with low temperature for factual accuracy
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.1,  # Very low for factual accuracy
+                top_p=0.8,
+                top_k=40,
+                max_output_tokens=8192,  # Much higher for Gemini 2.5 Pro thoughts
+            )
+        )
+
+        # Extract the response text
+        response_text = response.text.strip() if response.text else ""
+        logger.info(f"🤖 Gemini response received: {len(response_text)} characters")
+
+        # Log the actual response for debugging
+        if response_text:
+            logger.info(f"📝 Response preview: {response_text[:200]}...")
+        else:
+            logger.error("❌ Empty response from Gemini")
+            # Try to get more info about the response
+            logger.error(f"Response object: {response}")
+            if hasattr(response, 'candidates'):
+                logger.error(f"Candidates: {response.candidates}")
+            if hasattr(response, 'prompt_feedback'):
+                logger.error(f"Prompt feedback: {response.prompt_feedback}")
+
+        # Parse JSON response
+        if not response_text:
+            logger.error("❌ Empty response from Gemini - using fallback answers")
+            answers = ["Information not available in the document"] * 10
+        else:
+            # Try to extract JSON from the response
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                parsed_response = json.loads(json_str)
+                answers = parsed_response.get("answers", [])
+            else:
+                # Fallback: try to parse the entire response as JSON
+                parsed_response = json.loads(response_text)
+                answers = parsed_response.get("answers", [])
+
+        # Validate we have exactly 10 answers
+        if len(answers) != 10:
+            logger.error(f"❌ Expected 10 answers, got {len(answers)}")
+            # Pad or trim to ensure exactly 10 answers
+            if len(answers) < 10:
+                answers.extend(["Information not available in the document"] * (10 - len(answers)))
+            else:
+                answers = answers[:10]
+
+        logger.info(f"✅ Successfully processed {len(answers)} answers")
+        return answers
+
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parsing error: {str(e)}")
+        # Return fallback answers
+        return ["Error processing document - JSON parsing failed"] * 10
+
+    except Exception as e:
+        logger.error(f"❌ Document processing error: {str(e)}")
+        # Return fallback answers
+        return ["Error processing document"] * 10
+
+# =============================================================================
 # API Endpoints
 # =============================================================================
 
@@ -170,69 +274,93 @@ async def health_check():
 @app.post("/webhook")
 async def webhook_listener(request: Request):
     """
-    Generic webhook endpoint for external services
-    Accepts POST requests with JSON payloads from services like:
-    - Stripe payments
-    - GitHub events
-    - Custom integrations
-    - Third-party notifications
+    HackRx Document Analysis Webhook
+    Processes document content and questions for evaluation
+
+    Expected payload:
+    {
+        "type": "document_analysis",
+        "content": "Full document text...",
+        "questions": ["Q1", "Q2", ..., "Q10"],
+        "filename": "document.pdf",
+        "user_id": "user123",
+        "timestamp": "2025-08-03T18:00:00Z"
+    }
+
+    Returns:
+    {
+        "answers": ["Answer1", "Answer2", ..., "Answer10"]
+    }
     """
     try:
-        # Get the raw request body
-        body = await request.body()
-
         # Parse JSON payload
         payload = await request.json()
 
-        # Get headers for potential signature verification
-        headers = dict(request.headers)
-
-        # Log webhook data (you can customize this)
+        # Log webhook data
         logger.info(f"🔗 Webhook received from {request.client.host}")
-        logger.info(f"📦 Payload: {payload}")
-        logger.info(f"📋 Headers: {headers}")
+        logger.info(f"📦 Processing document analysis request")
 
-        # TODO: Add your custom webhook processing logic here
-        # Examples:
-        # - Process Stripe payment confirmations
-        # - Handle GitHub repository events
-        # - Trigger document processing workflows
-        # - Send notifications
-
-        # Example processing based on webhook type
+        # Check if this is a document analysis request
         webhook_type = payload.get("type", "unknown")
 
-        if webhook_type == "payment.success":
-            # Handle payment success
-            logger.info("💳 Payment webhook processed")
-        elif webhook_type == "document.uploaded":
-            # Handle document upload notification
-            logger.info("📄 Document upload webhook processed")
+        if webhook_type == "document_analysis":
+            # Extract required fields
+            content = payload.get("content", "")
+            questions = payload.get("questions", [])
+            filename = payload.get("filename", "document.pdf")
+            user_id = payload.get("user_id", "anonymous")
+
+            # Validate input
+            if not content:
+                return JSONResponse(
+                    content={"error": "Document content is required"},
+                    status_code=400
+                )
+
+            if not questions or len(questions) != 10:
+                return JSONResponse(
+                    content={"error": "Exactly 10 questions are required"},
+                    status_code=400
+                )
+
+            logger.info(f"📄 Processing document: {filename}")
+            logger.info(f"👤 User: {user_id}")
+            logger.info(f"❓ Questions: {len(questions)}")
+
+            # Initialize the API if not already done
+            await enhanced_api.initialize()
+
+            # Process document and questions using LangChain
+            answers = await process_document_questions(content, questions)
+
+            # Return only the answers array as required by HackRx evaluator
+            return JSONResponse(
+                content={"answers": answers},
+                status_code=200
+            )
+
         else:
-            # Handle generic webhook
+            # Handle other webhook types (generic processing)
             logger.info(f"🔔 Generic webhook processed: {webhook_type}")
 
-        # Return success response
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": "Webhook received and processed",
-                "webhook_type": webhook_type,
-                "timestamp": datetime.now().isoformat()
-            },
-            status_code=200
-        )
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "message": "Webhook received and processed",
+                    "webhook_type": webhook_type,
+                    "timestamp": datetime.now().isoformat()
+                },
+                status_code=200
+            )
 
     except Exception as e:
         logger.error(f"❌ Webhook processing error: {str(e)}")
         return JSONResponse(
             content={
-                "status": "error",
-                "message": "Webhook processing failed",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
+                "error": "Webhook processing failed",
+                "details": str(e)
             },
-            status_code=400
+            status_code=500
         )
 
 @app.get("/webhook/test")
@@ -243,10 +371,37 @@ async def webhook_test():
         "webhook_url": "https://doc-analyze.onrender.com/webhook",
         "methods": ["POST"],
         "content_type": "application/json",
-        "example_payload": {
-            "type": "test",
-            "message": "Hello webhook!",
-            "timestamp": datetime.now().isoformat()
+        "supported_types": {
+            "document_analysis": "HackRx document analysis with 10 questions",
+            "generic": "Generic webhook processing"
+        },
+        "example_payloads": {
+            "document_analysis": {
+                "type": "document_analysis",
+                "filename": "policy.pdf",
+                "content": "Document content here...",
+                "questions": [
+                    "Question 1?",
+                    "Question 2?",
+                    "... (10 questions total)"
+                ],
+                "user_id": "user123",
+                "timestamp": datetime.now().isoformat()
+            },
+            "generic": {
+                "type": "test",
+                "message": "Hello webhook!",
+                "timestamp": datetime.now().isoformat()
+            }
+        },
+        "expected_response": {
+            "document_analysis": {
+                "answers": ["Answer 1", "Answer 2", "... (10 answers total)"]
+            },
+            "generic": {
+                "status": "success",
+                "message": "Webhook received and processed"
+            }
         }
     }
 
