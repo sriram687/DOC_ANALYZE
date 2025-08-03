@@ -12,8 +12,9 @@ import os
 from datetime import datetime
 
 # FastAPI imports
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import uvicorn
 
 # Local imports
@@ -166,6 +167,89 @@ async def health_check():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.post("/webhook")
+async def webhook_listener(request: Request):
+    """
+    Generic webhook endpoint for external services
+    Accepts POST requests with JSON payloads from services like:
+    - Stripe payments
+    - GitHub events
+    - Custom integrations
+    - Third-party notifications
+    """
+    try:
+        # Get the raw request body
+        body = await request.body()
+
+        # Parse JSON payload
+        payload = await request.json()
+
+        # Get headers for potential signature verification
+        headers = dict(request.headers)
+
+        # Log webhook data (you can customize this)
+        logger.info(f"🔗 Webhook received from {request.client.host}")
+        logger.info(f"📦 Payload: {payload}")
+        logger.info(f"📋 Headers: {headers}")
+
+        # TODO: Add your custom webhook processing logic here
+        # Examples:
+        # - Process Stripe payment confirmations
+        # - Handle GitHub repository events
+        # - Trigger document processing workflows
+        # - Send notifications
+
+        # Example processing based on webhook type
+        webhook_type = payload.get("type", "unknown")
+
+        if webhook_type == "payment.success":
+            # Handle payment success
+            logger.info("💳 Payment webhook processed")
+        elif webhook_type == "document.uploaded":
+            # Handle document upload notification
+            logger.info("📄 Document upload webhook processed")
+        else:
+            # Handle generic webhook
+            logger.info(f"🔔 Generic webhook processed: {webhook_type}")
+
+        # Return success response
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Webhook received and processed",
+                "webhook_type": webhook_type,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=200
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Webhook processing error: {str(e)}")
+        return JSONResponse(
+            content={
+                "status": "error",
+                "message": "Webhook processing failed",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=400
+        )
+
+@app.get("/webhook/test")
+async def webhook_test():
+    """Test endpoint to verify webhook functionality"""
+    return {
+        "message": "Webhook endpoint is active",
+        "webhook_url": "https://doc-analyze.onrender.com/webhook",
+        "methods": ["POST"],
+        "content_type": "application/json",
+        "example_payload": {
+            "type": "test",
+            "message": "Hello webhook!",
+            "timestamp": datetime.now().isoformat()
+        }
+    }
+
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
@@ -174,6 +258,7 @@ async def root():
         "endpoints": {
             "POST /ask-document": "Submit document and query (LangChain RAG)",
             "POST /ask-document-clean": "Submit document and query (Clean format)",
+            "POST /webhook": "Generic webhook endpoint for external services",
             "GET /health": "Health check",
             "GET /docs": "API documentation"
         },
@@ -182,7 +267,8 @@ async def root():
             "LangChain RAG Pipeline",
             "Google Gemini 2.5 Pro",
             "Pinecone Vector Store",
-            "Professional Response Formatting"
+            "Professional Response Formatting",
+            "Webhook Integration"
         ]
     }
 
