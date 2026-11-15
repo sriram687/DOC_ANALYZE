@@ -20,11 +20,11 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "start": "node init && react-scripts start",
+    "build": "node init && react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "build:prod": "cross-env GENERATE_SOURCEMAP=false react-scripts build",
+    "build:prod": "node init && cross-env GENERATE_SOURCEMAP=false react-scripts build",
     "preview": "serve -s build -l 3000",
     "analyze": "npm run build && npx bundle-analyzer build/static/js/*.js"
   },

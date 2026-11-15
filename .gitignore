@@ -3,10 +3,6 @@
 # ============================================================================
 # ENVIRONMENT & SECRETS
 # ============================================================================
-.env
-.env.local
-.env.production
-.env.staging
 *.key
 *.pem
 secrets/
@@ -61,7 +57,6 @@ coverage.xml
 # ============================================================================
 # IDEs & EDITORS
 # ============================================================================
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -130,6 +125,4 @@ frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
-branch_structure.json
-temp_auto_push.bat
-temp_interactive_push.bat
+config.bat
